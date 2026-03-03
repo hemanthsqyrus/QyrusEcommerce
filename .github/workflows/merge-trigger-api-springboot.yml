@@ -14,7 +14,7 @@ on:
 
 jobs:
   send_code_changes:
-    runs-on: ubuntu-latest
+    runs-on: runner-for-qyrus-public
 
     env:
       MONITORED_PATH: QyrusEcommerceJavaBackend
