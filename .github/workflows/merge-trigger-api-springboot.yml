@@ -146,7 +146,7 @@ jobs:
               qapi_password: $password,
               qapi_workspace_name: $workspace_name,
               qapi_suite_name: $suite_name,
-              qapi_environment_name: $environment_name
+              qapi_environment_name: $environment_name,
               github_token: $GH_TOKEN
             }')
 
