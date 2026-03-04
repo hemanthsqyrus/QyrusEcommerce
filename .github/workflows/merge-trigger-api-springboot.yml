@@ -3,12 +3,12 @@ name: Send Code Changes on Push
 on:
   push:
     branches:
-      - QAPI_seer_stg
+      - seer_common_stg
     paths:
       - 'QyrusEcommerceJavaBackend/**'
   pull_request:
     branches:
-      - QAPI_seer_stg
+      - seer_common_stg
     paths:
       - 'QyrusEcommerceJavaBackend/**'
 
@@ -111,7 +111,7 @@ jobs:
         shell: bash
         env:
           REPO_NAME: ${{ github.repository }}
-          BRANCH_NAME: QAPI_seer_stg
+          BRANCH_NAME: seer_common_stg
           COMMIT_IDS: ${{ env.commits }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           ENCODED_CHANGES: ${{ env.encoded_changes }}
@@ -142,11 +142,12 @@ jobs:
               branch: $branch,
               commit_ids: $commits,
               changes: $changes,
-              username: $username,
-              password: $password,
-              workspace_name: $workspace_name,
-              suite_name: $suite_name,
-              environment_name: $environment_name
+              qapi_username: $username,
+              qapi_password: $password,
+              qapi_workspace_name: $workspace_name,
+              qapi_suite_name: $suite_name,
+              qapi_environment_name: $environment_name
+              github_token: $GH_TOKEN
             }')
 
           echo "Posting to $ANALYZE_URL"
@@ -154,7 +155,6 @@ jobs:
             -X POST "$ANALYZE_URL" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${GATEWAY_TOKEN}" \
-            -H "GithubToken: $GH_TOKEN" \
             -d "$PAYLOAD")
 
           echo "Response Code: $HTTP_CODE"
