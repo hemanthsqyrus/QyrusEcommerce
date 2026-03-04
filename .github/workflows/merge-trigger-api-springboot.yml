@@ -3,18 +3,18 @@ name: Send Code Changes on Push
 on:
   push:
     branches:
-      - seer_common_stg
+      - QAPI_seer_stg
     paths:
       - 'QyrusEcommerceJavaBackend/**'
   pull_request:
     branches:
-      - seer_common_stg
+      - QAPI_seer_stg
     paths:
       - 'QyrusEcommerceJavaBackend/**'
 
 jobs:
   send_code_changes:
-    runs-on: ubuntu-latest
+    runs-on: runner-for-qyrus-public
 
     env:
       MONITORED_PATH: QyrusEcommerceJavaBackend
@@ -106,25 +106,12 @@ jobs:
       #     echo "gateway_token=$GATEWAY_TOKEN" >> $GITHUB_ENV
       #     echo "✅ Gateway authentication successful"
 
-      # verify GH token
-      - name: Debug GH_TOKEN presence
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: |
-          if [[ -z "${GH_TOKEN:-}" ]]; then
-            echo "❌ GH_TOKEN is EMPTY or not set"
-          else
-            echo "✅ GH_TOKEN is set (non-empty)"
-          fi
-
-    
       # 5) Send diff and metadata to Impact Analyzer
       - name: Send changes to Analyze API
         shell: bash
         env:
           REPO_NAME: ${{ github.repository }}
-          BRANCH_NAME: seer_common_stg
+          BRANCH_NAME: QAPI_seer_stg
           COMMIT_IDS: ${{ env.commits }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           ENCODED_CHANGES: ${{ env.encoded_changes }}
@@ -138,7 +125,7 @@ jobs:
         run: |
           set -euo pipefail
           BASE="${GATEWAY_URL%/}"
-          ANALYZE_URL="https://testui-qyrusbot.qyrus.com/seer-common-dev/analyze-impact"
+          ANALYZE_URL="${BASE}/seer-common-producer/v1/analyze-impact"
 
           PAYLOAD=$(jq -n \
             --arg repo "$REPO_NAME" \
@@ -167,7 +154,7 @@ jobs:
             -X POST "$ANALYZE_URL" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${GATEWAY_TOKEN}" \
-            -H "github-token: $GH_TOKEN" \
+            -H "GithubToken: $GH_TOKEN" \
             -d "$PAYLOAD")
 
           echo "Response Code: $HTTP_CODE"
