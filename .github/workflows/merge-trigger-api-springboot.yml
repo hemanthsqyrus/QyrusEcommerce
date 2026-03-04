@@ -137,6 +137,7 @@ jobs:
             --arg workspace_name "$WORKSPACE_NAME" \
             --arg suite_name "$SUITE_NAME" \
             --arg environment_name "$ENVIRONMENT_NAME" \
+            --arg gh_token "$GH_TOKEN" \
             '{
               repository: $repo,
               branch: $branch,
@@ -147,7 +148,7 @@ jobs:
               qapi_workspace_name: $workspace_name,
               qapi_suite_name: $suite_name,
               qapi_environment_name: $environment_name,
-              github_token: $GH_TOKEN
+              github_token: $gh_token
             }')
 
           echo "Posting to $ANALYZE_URL"
