@@ -122,6 +122,7 @@ jobs:
           ENVIRONMENT_NAME: ${{ secrets.ENVIRONMENT_NAME }}
           GATEWAY_URL: ${{ secrets.GATEWAY_URL }}
           GATEWAY_TOKEN: ${{ secrets.GATEWAY_TOKEN }}
+          QAPI_API_TOKEN: ${{ secrets.QAPI_API_TOKEN }}
         run: |
           set -euo pipefail
           BASE="${GATEWAY_URL%/}"
@@ -137,6 +138,7 @@ jobs:
             --arg workspace_name "$WORKSPACE_NAME" \
             --arg suite_name "$SUITE_NAME" \
             --arg environment_name "$ENVIRONMENT_NAME" \
+            --arg api_token "$QAPI_API_TOKEN"
             '{
               repository: $repo,
               branch: $branch,
@@ -146,7 +148,8 @@ jobs:
               password: $password,
               workspace_name: $workspace_name,
               suite_name: $suite_name,
-              environment_name: $environment_name
+              environment_name: $environment_name,
+              api_token: $api_token
             }')
 
           echo "Posting to $ANALYZE_URL"
