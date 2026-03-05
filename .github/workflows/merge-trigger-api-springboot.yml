@@ -3,12 +3,12 @@ name: Send Code Changes on Push
 on:
   push:
     branches:
-      - QAPI_seer_stg
+      - QAPI_seer_stg_API_TOKEN
     paths:
       - 'QyrusEcommerceJavaBackend/**'
   pull_request:
     branches:
-      - QAPI_seer_stg
+      - QAPI_seer_stg_API_TOKEN
     paths:
       - 'QyrusEcommerceJavaBackend/**'
 
@@ -111,7 +111,7 @@ jobs:
         shell: bash
         env:
           REPO_NAME: ${{ github.repository }}
-          BRANCH_NAME: QAPI_seer_stg
+          BRANCH_NAME: QAPI_seer_stg_API_TOKEN
           COMMIT_IDS: ${{ env.commits }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           ENCODED_CHANGES: ${{ env.encoded_changes }}
