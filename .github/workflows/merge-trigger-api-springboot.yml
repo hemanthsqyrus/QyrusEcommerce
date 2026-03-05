@@ -138,7 +138,7 @@ jobs:
             --arg workspace_name "$WORKSPACE_NAME" \
             --arg suite_name "$SUITE_NAME" \
             --arg environment_name "$ENVIRONMENT_NAME" \
-            --arg api_token "$QAPI_API_TOKEN"
+            --arg api_token "$QAPI_API_TOKEN" \
             '{
               repository: $repo,
               branch: $branch,
