@@ -115,17 +115,71 @@ jobs:
           COMMIT_IDS: ${{ env.commits }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           ENCODED_CHANGES: ${{ env.encoded_changes }}
+
           USERNAME: ${{ secrets.USERNAME }}
           PASSWORD: ${{ secrets.PASSWORD }}
+
           WORKSPACE_NAME: ${{ secrets.WORKSPACE_NAME }}
           SUITE_NAME: ${{ secrets.SUITE_NAME }}
           ENVIRONMENT_NAME: ${{ secrets.ENVIRONMENT_NAME }}
+          
           GATEWAY_URL: ${{ secrets.GATEWAY_URL }}
           GATEWAY_TOKEN: ${{ secrets.GATEWAY_TOKEN }}
+
+          # --- Optional semantic/business-docs settings ---
+          # If ENABLE_BUSINESS_DOCS is not "true", semantic validation is skipped.
+          ENABLE_BUSINESS_DOCS: ${{ secrets.ENABLE_BUSINESS_DOCS }}
+          # JSON array string of document refs (Confluence page refs)
+          BUSINESS_DOC_REFS: ${{ secrets.BUSINESS_DOC_REFS }}
+
+          # Optional (defaults applied in bash if missing)
+          BUSINESS_DOCS_SOURCE: ${{ secrets.BUSINESS_DOCS_SOURCE }}
+          BUSINESS_DOCS_MODE: ${{ secrets.BUSINESS_DOCS_MODE }}
+          CONFLUENCE_OUTPUT_FORMAT: ${{ secrets.CONFLUENCE_OUTPUT_FORMAT }}
+
+          # Required only when ENABLE_BUSINESS_DOCS=true (Confluence connector)
+          CONFLUENCE_BASE_URL: ${{ secrets.CONFLUENCE_BASE_URL }}
+          CONFLUENCE_USERNAME: ${{ secrets.CONFLUENCE_USERNAME }}
+          CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
         run: |
           set -euo pipefail
           BASE="${GATEWAY_URL%/}"
           ANALYZE_URL="${BASE}/seer-api-java-impact-analyzer-producer/v1/analyze-test-impact"
+
+          # Build optional business_context JSON for semantic validation
+          if [[ "${ENABLE_BUSINESS_DOCS:-false}" == "true" ]]; then
+            if [[ -z "${BUSINESS_DOC_REFS:-}" ]]; then
+              echo "❌ ENABLE_BUSINESS_DOCS=true but BUSINESS_DOC_REFS is empty"
+              exit 1
+            fi
+            if [[ -z "${CONFLUENCE_BASE_URL:-}" || -z "${CONFLUENCE_USERNAME:-}" || -z "${CONFLUENCE_API_TOKEN:-}" ]]; then
+              echo "❌ ENABLE_BUSINESS_DOCS=true but Confluence connector secrets are missing"
+              exit 1
+            fi
+
+            BUSINESS_CONTEXT_JSON=$(jq -n \
+              --arg source "${BUSINESS_DOCS_SOURCE:-confluence}" \
+              --arg mode "${BUSINESS_DOCS_MODE:-semantic_validation}" \
+              --argjson documents "${BUSINESS_DOC_REFS}" \
+              --arg base_url "${CONFLUENCE_BASE_URL}" \
+              --arg username "${CONFLUENCE_USERNAME}" \
+              --arg api_token "${CONFLUENCE_API_TOKEN}" \
+              --arg output_format "${CONFLUENCE_OUTPUT_FORMAT:-markdown}" \
+              '{
+                enabled: true,
+                source: $source,
+                mode: $mode,
+                documents: $documents,
+                connector_config: {
+                  base_url: $base_url,
+                  username: $username,
+                  api_token: $api_token,
+                  output_format: $output_format
+                }
+              }')
+          else
+            BUSINESS_CONTEXT_JSON="null"
+          fi
 
           PAYLOAD=$(jq -n \
             --arg repo "$REPO_NAME" \
@@ -137,6 +191,7 @@ jobs:
             --arg workspace_name "$WORKSPACE_NAME" \
             --arg suite_name "$SUITE_NAME" \
             --arg environment_name "$ENVIRONMENT_NAME" \
+            --argjson business_context "$BUSINESS_CONTEXT_JSON" \
             '{
               repository: $repo,
               branch: $branch,
@@ -146,7 +201,8 @@ jobs:
               password: $password,
               workspace_name: $workspace_name,
               suite_name: $suite_name,
-              environment_name: $environment_name
+              environment_name: $environment_name,
+              business_context: $business_context
             }')
 
           echo "Posting to $ANALYZE_URL"
