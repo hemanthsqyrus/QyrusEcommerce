@@ -122,6 +122,7 @@ jobs:
           ENVIRONMENT_NAME: ${{ secrets.ENVIRONMENT_NAME }}
           GATEWAY_URL: ${{ secrets.GATEWAY_URL }}
           GATEWAY_TOKEN: ${{ secrets.GATEWAY_TOKEN }}
+          QAPI_API_TOKEN: ${{ secrets.QAPI_API_TOKEN }}
         run: |
           set -euo pipefail
           BASE="${GATEWAY_URL%/}"
@@ -137,6 +138,7 @@ jobs:
             --arg workspace_name "$WORKSPACE_NAME" \
             --arg suite_name "$SUITE_NAME" \
             --arg environment_name "$ENVIRONMENT_NAME" \
+            --arg qapi_api_token "$QAPI_API_TOKEN" \
             --arg gh_token "$GH_TOKEN" \
             '{
               repository: $repo,
@@ -148,6 +150,7 @@ jobs:
               qapi_workspace_name: $workspace_name,
               qapi_suite_name: $suite_name,
               qapi_environment_name: $environment_name,
+              qapi_api_token: $qapi_api_token,
               github_token: $gh_token
             }')
 
