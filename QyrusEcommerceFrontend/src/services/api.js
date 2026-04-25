@@ -48,9 +48,9 @@ export const authAPI = {
     return api.get('/get-products/', { params: { category, subcategory, page } }); // Query params
   },
 
-  // Search products across all categories
-  searchProducts: (query) => {
-    return api.get('/search-products/', { params: { query } }); // Query param
+  // Search products across all categories with pagination/sort/filters
+  searchProducts: (params) => {
+    return api.get('/search-products/', { params });
   },
 
   getCategories: () => {
