@@ -19,13 +19,24 @@ public class OrderController {
     private final OrderService orderService;
 
     @PostMapping("/create-order")
-    public ResponseEntity<Map<String, Object>> createOrder(@Valid @RequestBody CreateOrderRequest request) {
+    public ResponseEntity<Map<String, Object>> createOrder(
+        @Valid @RequestBody CreateOrderRequest request,
+        @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKeyHeader
+    ) {
+        if ((request.getIdempotencyKey() == null || request.getIdempotencyKey().trim().isEmpty())
+            && idempotencyKeyHeader != null && !idempotencyKeyHeader.trim().isEmpty()) {
+            request.setIdempotencyKey(idempotencyKeyHeader.trim());
+        }
         Order order = orderService.createOrder(request);
         
         Map<String, Object> response = new HashMap<>();
         response.put("message", "Order created successfully");
         response.put("order_id", order.getId());
         response.put("order_status", order.getStatus());
+        response.put("subtotal", order.getSubtotal());
+        response.put("tax", order.getTax());
+        response.put("shipping", order.getShipping());
+        response.put("total", order.getTotal());
         return ResponseEntity.ok(response);
     }
 
@@ -42,22 +53,24 @@ public class OrderController {
             // Transform order items to the expected product format
             List<Map<String, Object>> products = order.getItems().stream().map(item -> {
                 Map<String, Object> product = new HashMap<>();
-                product.put("productId", item.getProduct().getId());
-                product.put("productName", item.getProduct().getName());
+                product.put("productId", item.getProduct() != null ? item.getProduct().getId() : null);
+                product.put("name", item.getProductName());
+                product.put("image", item.getProductImage());
                 product.put("quantity", item.getQuantity());
-                
-                // Since these fields don't exist in OrderItem, we'll use default values
-                // You may need to adjust these based on your actual requirements
-                product.put("selectedColor", "#FF0000");  // Default color
-                product.put("selectedProvider", "Default Provider");
-                product.put("selectedSize", "M");  // Default size
-                product.put("price", item.getProduct().getPrice());  // Assuming product has price
-                
+                product.put("selectedColor", item.getColor());
+                product.put("selectedProvider", item.getProvider());
+                product.put("selectedSize", item.getSize());
+                product.put("price", item.getUnitPrice());
+                product.put("line_total", item.getLineTotal());
                 return product;
             }).collect(java.util.stream.Collectors.toList());
             
             formattedOrder.put("products", products);
             formattedOrder.put("payment_method", order.getPaymentMethod());
+            formattedOrder.put("subtotal", order.getSubtotal());
+            formattedOrder.put("tax", order.getTax());
+            formattedOrder.put("shipping", order.getShipping());
+            formattedOrder.put("total", order.getTotal());
             formattedOrder.put("status", order.getStatus());
             formattedOrder.put("created_at", order.getCreatedAt());
             return formattedOrder;

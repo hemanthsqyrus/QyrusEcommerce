@@ -20,7 +20,11 @@ public class OrderItem {
     private Product product;
     
     private Integer quantity;
+    private String productName;
+    private String productImage;
+    private Double unitPrice;
+    private Double lineTotal;
     private String color;
     private String size;
     private String provider;
-} 
+}

@@ -1,5 +1,6 @@
 package com.ecommerce.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.Data;
 import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
@@ -15,6 +16,8 @@ public class CreateOrderRequest {
     
     @NotNull
     private String paymentMethod;
+
+    private String idempotencyKey;
     
     @NotEmpty
     private List<ProductOrder> products;
@@ -22,10 +25,14 @@ public class CreateOrderRequest {
     @Data
     public static class ProductOrder {
         @NotNull
+        @JsonAlias("product_id")
         private Long productId;
-        private Integer quantity;
+        private Integer quantity = 1;
+        @JsonAlias("selectedColor")
         private String color;
+        @JsonAlias("selectedSize")
         private String size;
+        @JsonAlias("selectedProvider")
         private String provider;
     }
-} 
+}

@@ -25,6 +25,11 @@ public class Order {
     private List<OrderItem> items;
     
     private String paymentMethod;
+    private String idempotencyKey;
+    private Double subtotal;
+    private Double tax;
+    private Double shipping;
+    private Double total;
     private String status;
     private LocalDateTime createdAt;
     
