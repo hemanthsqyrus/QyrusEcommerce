@@ -253,13 +253,11 @@ const ProductDetails = () => {
                   state: {
                     products: [
                       {
-                        productId,
-                        productName: product.name,
+                        productId: Number(productId),
                         quantity,
                         selectedColor,
                         selectedProvider,
                         selectedSize,
-                        price: product.price,
                       },
                     ],
                   },

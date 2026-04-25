@@ -1,19 +1,39 @@
-import React, { useState, useEffect } from "react";
+import React, { useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { authAPI } from "../services/api";
 import { useUser } from "../context/UserContext";
+
+const createCheckoutIdempotencyKey = () => {
+  if (window.crypto?.randomUUID) {
+    return window.crypto.randomUUID();
+  }
+  return `checkout_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+};
 
 const PaymentPage = () => {
   const [paymentMethod, setPaymentMethod] = useState("");
   const [cardDetails, setCardDetails] = useState({ number: "", expiry: "", cvv: "" });
   const [upiId, setUpiId] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { email } = useUser();
+  const idempotencyKeyRef = useRef(createCheckoutIdempotencyKey());
 
   const { addressId, products } = location.state || {};
 
   const handlePayment = async () => {
+    if (!email) {
+      alert("Please login to continue.");
+      return;
+    }
+
+    if (!addressId || !products?.length) {
+      alert("Missing checkout details. Please start checkout again.");
+      navigate("/cart");
+      return;
+    }
+
     if (!paymentMethod) {
       alert("Please select a payment method.");
       return;
@@ -29,27 +49,50 @@ const PaymentPage = () => {
       return;
     }
 
+    const normalizedProducts = products.map((product) => ({
+      productId: Number(product.productId ?? product.product_id),
+      quantity: Number(product.quantity ?? 1),
+      selectedColor: product.selectedColor ?? product.color ?? "",
+      selectedProvider: product.selectedProvider ?? product.provider ?? "",
+      selectedSize: product.selectedSize ?? product.size ?? "",
+    }));
+
+    const invalidProduct = normalizedProducts.find((product) => !Number.isFinite(product.productId) || product.productId <= 0 || product.quantity <= 0);
+    if (invalidProduct) {
+      alert("Invalid product details in checkout. Please retry from cart.");
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
-      // Mock Create Order API Call
       const orderData = {
-        email: email, // Replace with user's email
+        email,
         addressId,
-        products,
+        products: normalizedProducts,
         paymentMethod,
+        idempotencyKey: idempotencyKeyRef.current,
       };
 
-      await authAPI.createOrder(orderData);
+      const { data } = await authAPI.createOrder(orderData, {
+        idempotencyKey: idempotencyKeyRef.current,
+      });
 
-      // Redirect to "My Orders" page after successful order creation
+      alert(`Order placed successfully. Total: ₹${data.total}`);
       navigate("/my-orders");
     } catch (err) {
       alert("Failed to place order. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
     <div className="container mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">Payment</h1>
+      <div className="mb-6 p-4 bg-gray-50 border rounded">
+        <p className="text-sm text-gray-700">Items in this order: <strong>{products?.length || 0}</strong></p>
+        <p className="text-sm text-gray-600">Final subtotal, tax, shipping, and total are computed by the server at order creation time.</p>
+      </div>
 
       <div className="space-y-4">
         <h2 className="text-xl font-bold">Select Payment Method</h2>
@@ -116,9 +159,10 @@ const PaymentPage = () => {
         </button>
         <button
           onClick={handlePayment}
-          className="px-6 py-3 bg-green-600 text-white rounded hover:bg-green-700"
+          disabled={isSubmitting}
+          className="px-6 py-3 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
-          Pay Now
+          {isSubmitting ? "Processing..." : "Pay Now"}
         </button>
       </div>
     </div>
