@@ -188,10 +188,75 @@ def get_products(category: str = Query(...), subcategory: Optional[str] = Query(
     }
 
 @app.get("/search-products/")
-def search_products(query: str = Query(...)):
+def search_products(
+    query: str = Query(...),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(15, ge=1, le=100),
+    sort_by: str = Query("name"),
+    sort_order: str = Query("asc"),
+    min_price: Optional[float] = Query(None, ge=0),
+    max_price: Optional[float] = Query(None, ge=0),
+    category: Optional[str] = Query(None),
+    subcategory: Optional[str] = Query(None),
+):
+    if min_price is not None and max_price is not None and min_price > max_price:
+        raise HTTPException(status_code=400, detail="min_price cannot be greater than max_price")
+
+    normalized_sort_by = sort_by.lower()
+    allowed_sort_fields = {"id", "name", "price", "category", "subcategory", "rating"}
+    if normalized_sort_by not in allowed_sort_fields:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid sort_by. Allowed values: {', '.join(sorted(allowed_sort_fields))}",
+        )
+
+    normalized_sort_order = sort_order.lower()
+    if normalized_sort_order not in {"asc", "desc"}:
+        raise HTTPException(status_code=400, detail="sort_order must be either 'asc' or 'desc'")
+
     filtered_products = [p for p in products_db if query.lower() in p["name"].lower()]
+
+    if category and category.lower() not in {"none", "all"}:
+        filtered_products = [
+            p for p in filtered_products if p["category"].lower() == category.lower()
+        ]
+
+    if subcategory and subcategory.lower() not in {"none", "all"}:
+        filtered_products = [
+            p for p in filtered_products if p["subcategory"].lower() == subcategory.lower()
+        ]
+
+    if min_price is not None:
+        filtered_products = [p for p in filtered_products if p["price"] >= min_price]
+
+    if max_price is not None:
+        filtered_products = [p for p in filtered_products if p["price"] <= max_price]
+
+    reverse_order = normalized_sort_order == "desc"
+    if normalized_sort_by in {"name", "category", "subcategory"}:
+        filtered_products = sorted(
+            filtered_products,
+            key=lambda p: str(p.get(normalized_sort_by, "")).lower(),
+            reverse=reverse_order,
+        )
+    else:
+        filtered_products = sorted(
+            filtered_products,
+            key=lambda p: p.get(normalized_sort_by) if p.get(normalized_sort_by) is not None else 0,
+            reverse=reverse_order,
+        )
+
+    total_items = len(filtered_products)
+    total_pages = (total_items + page_size - 1) // page_size if total_items > 0 else 0
+    start = (page - 1) * page_size
+    end = start + page_size
+
     return {
-        "products": filtered_products
+        "products": filtered_products[start:end],
+        "total_items": total_items,
+        "total_pages": total_pages,
+        "page": page,
+        "page_size": page_size,
     }
 
 @app.get("/get-product-categories/")
