@@ -145,8 +145,12 @@ updateAddress: (email, addressId, newAddress) => {
   });
 },
 
-createOrder: async (orderData) => {
-  return await api.post('/create-order/', orderData);
+createOrder: async (orderData, options = {}) => {
+  const headers = {};
+  if (options.idempotencyKey) {
+    headers["Idempotency-Key"] = options.idempotencyKey;
+  }
+  return await api.post('/create-order/', orderData, { headers });
 },
 
 getOrders: async (email) => {

@@ -60,12 +60,10 @@ const Cart = () => {
   const handleCheckout = () => {
     const products = selectedItems.map((item) => ({
       productId: item.product_id,
-      productName: item.name,
       quantity: item.quantity,
       selectedColor: item.color,
       selectedProvider: item.provider,
       selectedSize: item.size,
-      price: item.price,
     }));
 
     navigate('/buy-now', { state: { products } });
