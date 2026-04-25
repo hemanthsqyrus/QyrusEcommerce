@@ -33,6 +33,9 @@ addresses_db = {}
 cart_db = {}
 favorites_db = {}
 orders_db = {}
+TAX_RATE = 0.18
+FREE_SHIPPING_SUBTOTAL = 500.0
+FLAT_SHIPPING_FEE = 40.0
 account_details_db["admin@qyrus.com"] = {
     "name": "Admin User",
     "age": 30,
@@ -45,6 +48,7 @@ class CreateOrderRequest(BaseModel):
     addressId: str
     products: list
     paymentMethod: str
+    idempotencyKey: Optional[str] = None
 
 class CancelOrderRequest(BaseModel):
     email: EmailStr
@@ -105,6 +109,52 @@ class UpdateAccountDetailsRequest(BaseModel):
     phone: str
     age: int
     country: str
+
+def _round_money(value: float) -> float:
+    return round(float(value) + 1e-9, 2)
+
+def _normalize_order_product(raw_product: dict) -> dict:
+    if not isinstance(raw_product, dict):
+        raise HTTPException(status_code=400, detail="Invalid product payload")
+
+    product_id = raw_product.get("productId", raw_product.get("product_id"))
+    if product_id is None:
+        raise HTTPException(status_code=400, detail="Each product must include productId")
+
+    try:
+        normalized_product_id = int(product_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid productId")
+
+    quantity = raw_product.get("quantity", 1)
+    try:
+        normalized_quantity = int(quantity)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail=f"Invalid quantity for product {normalized_product_id}")
+
+    if normalized_quantity <= 0:
+        raise HTTPException(status_code=400, detail=f"Quantity must be greater than zero for product {normalized_product_id}")
+
+    return {
+        "product_id": normalized_product_id,
+        "quantity": normalized_quantity,
+        "selected_color": raw_product.get("selectedColor", raw_product.get("color", "")) or "",
+        "selected_provider": raw_product.get("selectedProvider", raw_product.get("provider", "")) or "",
+        "selected_size": raw_product.get("selectedSize", raw_product.get("size", "")) or ""
+    }
+
+def _compute_order_totals(snapshot_products: list) -> dict:
+    subtotal = _round_money(sum(item["line_total"] for item in snapshot_products))
+    tax = _round_money(subtotal * TAX_RATE)
+    shipping = 0.0 if subtotal >= FREE_SHIPPING_SUBTOTAL else FLAT_SHIPPING_FEE
+    shipping = _round_money(shipping)
+    total = _round_money(subtotal + tax + shipping)
+    return {
+        "subtotal": subtotal,
+        "tax": tax,
+        "shipping": shipping,
+        "total": total
+    }
 
 @app.post("/auth/login/")
 def login(request: LoginRequest):
@@ -502,7 +552,7 @@ def update_address(request: UpdateAddressRequest):
 
 
 @app.post("/create-order/")
-def create_order(request: CreateOrderRequest):
+def create_order(request: CreateOrderRequest, http_request: Request):
     # Validate user
     if request.email not in users_db:
         raise HTTPException(status_code=404, detail="User not found")
@@ -512,10 +562,52 @@ def create_order(request: CreateOrderRequest):
     if not any(addr["address_id"] == request.addressId for addr in user_addresses):
         raise HTTPException(status_code=404, detail="Address not found")
 
-    # Validate products
-    for product in request.products:
-        if not any(p["id"] == int(product["productId"]) for p in products_db):
-            raise HTTPException(status_code=404, detail=f"Product with ID {product['productId']} not found")
+    if not request.products:
+        raise HTTPException(status_code=400, detail="At least one product is required")
+
+    idempotency_key = request.idempotencyKey.strip() if request.idempotencyKey else None
+    if not idempotency_key:
+        header_key = http_request.headers.get("Idempotency-Key")
+        if header_key:
+            idempotency_key = header_key.strip()
+    if idempotency_key:
+        existing_order = next(
+            (order for order in orders_db.get(request.email, []) if order.get("idempotency_key") == idempotency_key),
+            None
+        )
+        if existing_order:
+            return {
+                "message": "Order created successfully",
+                "order_id": existing_order["order_id"],
+                "order_status": existing_order["status"],
+                "subtotal": existing_order["subtotal"],
+                "tax": existing_order["tax"],
+                "shipping": existing_order["shipping"],
+                "total": existing_order["total"]
+            }
+
+    snapshot_products = []
+    for raw_product in request.products:
+        normalized_product = _normalize_order_product(raw_product)
+        product = next((p for p in products_db if p["id"] == normalized_product["product_id"]), None)
+        if not product:
+            raise HTTPException(status_code=404, detail=f"Product with ID {normalized_product['product_id']} not found")
+
+        unit_price = _round_money(product["price"])
+        line_total = _round_money(unit_price * normalized_product["quantity"])
+        snapshot_products.append({
+            "productId": product["id"],
+            "name": product["name"],
+            "image": product.get("image"),
+            "quantity": normalized_product["quantity"],
+            "selectedColor": normalized_product["selected_color"],
+            "selectedProvider": normalized_product["selected_provider"],
+            "selectedSize": normalized_product["selected_size"],
+            "price": unit_price,
+            "line_total": line_total
+        })
+
+    totals = _compute_order_totals(snapshot_products)
 
     # Generate a unique order ID
     order_id = str(uuid.uuid4())
@@ -527,8 +619,13 @@ def create_order(request: CreateOrderRequest):
     orders_db[request.email].append({
         "order_id": order_id,
         "address_id": request.addressId,
-        "products": request.products,
+        "products": snapshot_products,
         "payment_method": request.paymentMethod,
+        "idempotency_key": idempotency_key,
+        "subtotal": totals["subtotal"],
+        "tax": totals["tax"],
+        "shipping": totals["shipping"],
+        "total": totals["total"],
         "status": "confirmed",
         "created_at": datetime.utcnow().isoformat()
     })
@@ -536,7 +633,11 @@ def create_order(request: CreateOrderRequest):
     return {
         "message": "Order created successfully",
         "order_id": order_id,
-        "order_status": "confirmed"
+        "order_status": "confirmed",
+        "subtotal": totals["subtotal"],
+        "tax": totals["tax"],
+        "shipping": totals["shipping"],
+        "total": totals["total"]
     }
 
 @app.get("/get-orders/")
