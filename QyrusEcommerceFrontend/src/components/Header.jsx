@@ -14,7 +14,6 @@ const Header = () => {
   const [hoveredCategory, setHoveredCategory] = useState(''); // Track hovered category
   const [isDropdownOpen, setIsDropdownOpen] = useState(false); // Track if the dropdown is open
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
   const navigate = useNavigate();
   const [isaccountdropdownopen, setAccountDropdownOpen] = useState(false);
 
@@ -62,20 +61,22 @@ const Header = () => {
     setIsDropdownOpen((prevState) => !prevState);
   };
 
-  const handleSearch = async (e) => {
+  const handleSearch = (e) => {
     e.preventDefault(); // Prevent default form submission
-    if (!search.trim()) {
+    const trimmedSearch = search.trim();
+    if (!trimmedSearch) {
       console.warn('Search query is empty');
       return;
     }
 
-    try {
-      const { data } = await authAPI.searchProducts(search);
-      // Navigate to the products page with search results
-      navigate(`/products?search=${search}`, { state: { products: data.products } });
-    } catch (err) {
-      console.error('Search failed:', err);
-    }
+    const params = new URLSearchParams({
+      search: trimmedSearch,
+      page: '1',
+      page_size: '15',
+      sort_by: 'name',
+      sort_order: 'asc',
+    });
+    navigate(`/products?${params.toString()}`);
   };
 
 
