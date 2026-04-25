@@ -62,6 +62,14 @@ class AddToCartRequest(BaseModel):
     size: str
     quantity: int
 
+class UpdateCartItemQuantityRequest(BaseModel):
+    email: EmailStr
+    cart_item_id: str
+    quantity: int
+
+class ClearCartRequest(BaseModel):
+    email: EmailStr
+
 class CreateAddressRequest(BaseModel):
     email: EmailStr
     address: str
@@ -252,6 +260,9 @@ def update_account_details(request: UpdateAccountDetailsRequest):
 
 @app.post("/add-to-cart/")
 def add_to_cart(request: AddToCartRequest):
+    if request.quantity < 1:
+        raise HTTPException(status_code=400, detail="Quantity must be at least 1")
+
     # Check if the user exists
     if request.email not in users_db:
         raise HTTPException(status_code=404, detail="User not found")
@@ -264,21 +275,38 @@ def add_to_cart(request: AddToCartRequest):
     # Initialize user's cart if not already present
     if request.email not in cart_db:
         cart_db[request.email] = []
-    
-    # Add item to the user's cart
-    cart_item = {
-        "cart_item_id": str(uuid.uuid4()),
-        "product_id": request.product_id,
-        "color": request.color,
-        "provider": request.provider,
-        "size": request.size,
-        "quantity": request.quantity
-    }
-    cart_db[request.email].append(cart_item)
-    
+
+    user_cart = cart_db[request.email]
+    existing_item = next(
+        (
+            item
+            for item in user_cart
+            if item["product_id"] == request.product_id
+            and item["color"] == request.color
+            and item["provider"] == request.provider
+            and item["size"] == request.size
+        ),
+        None,
+    )
+
+    if existing_item:
+        existing_item["quantity"] += request.quantity
+        message = "Item quantity updated successfully"
+    else:
+        cart_item = {
+            "cart_item_id": str(uuid.uuid4()),
+            "product_id": request.product_id,
+            "color": request.color,
+            "provider": request.provider,
+            "size": request.size,
+            "quantity": request.quantity,
+        }
+        user_cart.append(cart_item)
+        message = "Item added to cart successfully"
+
     return {
-        "message": "Item added to cart successfully",
-        "cart": cart_db[request.email]
+        "message": message,
+        "cart": user_cart,
     }
 
 @app.post("/record-contact/")
@@ -353,6 +381,46 @@ async def remove_from_cart(request: Request):
     return {
         "message": "Item removed from cart successfully",
         "cart": cart_db[email]
+    }
+
+
+@app.put("/update-cart-item-quantity/")
+def update_cart_item_quantity(request: UpdateCartItemQuantityRequest):
+    if request.quantity < 1:
+        raise HTTPException(status_code=400, detail="Quantity must be at least 1")
+
+    # Validate email
+    if request.email not in users_db:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Validate cart exists
+    user_cart = cart_db.get(request.email, [])
+    if not user_cart:
+        raise HTTPException(status_code=404, detail="Cart is empty")
+
+    # Update the item quantity
+    cart_item = next((item for item in user_cart if item["cart_item_id"] == request.cart_item_id), None)
+    if not cart_item:
+        raise HTTPException(status_code=404, detail="Cart item not found")
+
+    cart_item["quantity"] = request.quantity
+
+    return {
+        "message": "Cart item quantity updated successfully",
+        "cart": user_cart,
+    }
+
+
+@app.delete("/clear-cart/")
+def clear_cart(request: ClearCartRequest):
+    # Validate email
+    if request.email not in users_db:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    cart_db[request.email] = []
+    return {
+        "message": "Cart cleared successfully",
+        "cart": [],
     }
 
 
