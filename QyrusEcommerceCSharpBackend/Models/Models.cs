@@ -6,8 +6,21 @@ namespace QyrusEcommerceCSharpBackend.Models;
 public class CreateOrderRequest {
     [EmailAddress] public string Email { get; set; } = "";
     public string AddressId { get; set; } = "";
-    public List<CartItem> Products { get; set; } = new();
+    public List<OrderProductInput> Products { get; set; } = new();
     public string PaymentMethod { get; set; } = "";
+    public string? IdempotencyKey { get; set; }
+}
+
+public class OrderProductInput {
+    [JsonPropertyName("productId")] public int? ProductId { get; set; }
+    [JsonPropertyName("product_id")] public int? ProductIdSnake { get; set; }
+    public int Quantity { get; set; } = 1;
+    [JsonPropertyName("selectedColor")] public string? SelectedColor { get; set; }
+    public string? Color { get; set; }
+    [JsonPropertyName("selectedProvider")] public string? SelectedProvider { get; set; }
+    public string? Provider { get; set; }
+    [JsonPropertyName("selectedSize")] public string? SelectedSize { get; set; }
+    public string? Size { get; set; }
 }
 
 public class CancelOrderRequest {
@@ -141,10 +154,27 @@ public class UserAddress {
 public class Order {
     [JsonPropertyName("order_id")] public string OrderId { get; set; } = "";
     [JsonPropertyName("address_id")] public string AddressId { get; set; } = "";
-    [JsonPropertyName("products")] public List<CartItem> Products { get; set; } = new();
+    [JsonPropertyName("products")] public List<OrderProductSnapshot> Products { get; set; } = new();
     [JsonPropertyName("payment_method")] public string PaymentMethod { get; set; } = "";
+    [JsonPropertyName("idempotency_key")] public string? IdempotencyKey { get; set; }
+    [JsonPropertyName("subtotal")] public decimal Subtotal { get; set; }
+    [JsonPropertyName("tax")] public decimal Tax { get; set; }
+    [JsonPropertyName("shipping")] public decimal Shipping { get; set; }
+    [JsonPropertyName("total")] public decimal Total { get; set; }
     [JsonPropertyName("status")] public string Status { get; set; } = "";
     [JsonPropertyName("created_at")] public string CreatedAt { get; set; } = "";
+}
+
+public class OrderProductSnapshot {
+    [JsonPropertyName("productId")] public int ProductId { get; set; }
+    [JsonPropertyName("name")] public string Name { get; set; } = "";
+    [JsonPropertyName("image")] public string Image { get; set; } = "";
+    [JsonPropertyName("quantity")] public int Quantity { get; set; }
+    [JsonPropertyName("selectedColor")] public string SelectedColor { get; set; } = "";
+    [JsonPropertyName("selectedProvider")] public string SelectedProvider { get; set; } = "";
+    [JsonPropertyName("selectedSize")] public string SelectedSize { get; set; } = "";
+    [JsonPropertyName("price")] public decimal Price { get; set; }
+    [JsonPropertyName("line_total")] public decimal LineTotal { get; set; }
 }
 
 public class verification_token_data {
