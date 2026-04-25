@@ -2,7 +2,9 @@ package com.ecommerce.controller;
 
 import com.ecommerce.dto.AddToCartRequest;
 import com.ecommerce.dto.CartItemResponse;
+import com.ecommerce.dto.ClearCartRequest;
 import com.ecommerce.dto.RemoveFromCartRequest;
+import com.ecommerce.dto.UpdateCartItemQuantityRequest;
 import com.ecommerce.service.CartService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,7 +21,7 @@ import java.util.Map;
 public class ShoppingCartController {
     private final CartService cartService;
 
-    @GetMapping("/get-cart")
+    @GetMapping({"/get-cart", "/get-cart/"})
     public ResponseEntity<Map<String, Object>> getCart(@RequestParam String email) {
         log.info("Fetching cart for user: {}", email);
         List<CartItemResponse> cart = cartService.getCartItems(email);
@@ -30,7 +32,7 @@ public class ShoppingCartController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/add-to-cart")
+    @PostMapping({"/add-to-cart", "/add-to-cart/"})
     public ResponseEntity<Map<String, Object>> addToCart(@RequestBody AddToCartRequest request) {
         log.info("Adding item to cart: {}", request);
         
@@ -38,7 +40,7 @@ public class ShoppingCartController {
             throw new IllegalArgumentException("Email and productId are required");
         }
         
-        cartService.addToCart(
+        String message = cartService.addToCart(
             request.getEmail(), 
             request.getProductId(), 
             request.getColor(), 
@@ -50,12 +52,12 @@ public class ShoppingCartController {
         List<CartItemResponse> updatedCart = cartService.getCartItems(request.getEmail());
         
         Map<String, Object> response = new HashMap<>();
-        response.put("message", "Item added to cart successfully");
+        response.put("message", message);
         response.put("cart", updatedCart);
         return ResponseEntity.ok(response);
     }
 
-    @DeleteMapping("/remove-from-cart")
+    @DeleteMapping({"/remove-from-cart", "/remove-from-cart/"})
     public ResponseEntity<Map<String, Object>> removeFromCart(@RequestBody RemoveFromCartRequest request) {
         if (request == null || request.getEmail() == null || request.getCartItemId() == null) {
             throw new IllegalArgumentException("Email and cartItemId are required");
@@ -68,6 +70,37 @@ public class ShoppingCartController {
         Map<String, Object> response = new HashMap<>();
         response.put("message", "Item removed from cart successfully");
         response.put("cart", updatedCart);
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping({"/update-cart-item-quantity", "/update-cart-item-quantity/"})
+    public ResponseEntity<Map<String, Object>> updateCartItemQuantity(@RequestBody UpdateCartItemQuantityRequest request) {
+        if (request == null || request.getEmail() == null || request.getCartItemId() == null) {
+            throw new IllegalArgumentException("Email and cartItemId are required");
+        }
+
+        log.info("Updating cart item {} quantity to {} for user {}", request.getCartItemId(), request.getQuantity(), request.getEmail());
+        cartService.updateCartItemQuantity(request.getEmail(), request.getCartItemId(), request.getQuantity());
+        List<CartItemResponse> updatedCart = cartService.getCartItems(request.getEmail());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Cart item quantity updated successfully");
+        response.put("cart", updatedCart);
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping({"/clear-cart", "/clear-cart/"})
+    public ResponseEntity<Map<String, Object>> clearCart(@RequestBody ClearCartRequest request) {
+        if (request == null || request.getEmail() == null) {
+            throw new IllegalArgumentException("Email is required");
+        }
+
+        log.info("Clearing cart for user {}", request.getEmail());
+        cartService.clearCart(request.getEmail());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Cart cleared successfully");
+        response.put("cart", cartService.getCartItems(request.getEmail()));
         return ResponseEntity.ok(response);
     }
 } 

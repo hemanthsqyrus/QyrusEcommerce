@@ -1,6 +1,5 @@
 package com.ecommerce.service;
 
-import com.ecommerce.dto.AddToCartRequest;
 import com.ecommerce.dto.CartItemResponse;
 import com.ecommerce.model.CartItem;
 import com.ecommerce.model.Product;
@@ -11,13 +10,12 @@ import com.ecommerce.repository.UserRepository;
 import com.ecommerce.exception.ResourceNotFoundException;
 import com.ecommerce.exception.UnauthorizedException;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -30,8 +28,11 @@ public class CartService {
     private final ProductRepository productRepository;
 
     @Transactional
-    public void addToCart(String email, Long productId, String color, String provider, String size, int quantity) {
+    public String addToCart(String email, Long productId, String color, String provider, String size, int quantity) {
         log.info("Adding item to cart for user: {}, product: {}", email, productId);
+        if (quantity < 1) {
+            throw new IllegalArgumentException("Quantity must be at least 1");
+        }
         
         User user = userRepository.findByEmail(email)
             .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
@@ -39,21 +40,13 @@ public class CartService {
         Product product = productRepository.findById(productId)
             .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + productId));
             
-        // Check if the same product with same attributes already exists in cart
-        List<CartItem> existingItems = cartItemRepository.findAll().stream()
-            .filter(item -> item.getUser().getEmail().equals(email) &&
-                   item.getProduct().getId().equals(productId) &&
-                   item.getColor().equals(color) &&
-                   item.getProvider().equals(provider) &&
-                   item.getSize().equals(size))
-            .collect(Collectors.toList());
-            
-        if (!existingItems.isEmpty()) {
+        CartItem existingItem = findCartItemByVariant(user, productId, color, provider, size);
+        if (existingItem != null) {
             // Update quantity of existing item
-            CartItem existingItem = existingItems.get(0);
             existingItem.setQuantity(existingItem.getQuantity() + quantity);
             cartItemRepository.save(existingItem);
             log.info("Updated quantity of existing cart item");
+            return "Item quantity updated successfully";
         } else {
             // Create new cart item
             CartItem cartItem = new CartItem();
@@ -67,6 +60,7 @@ public class CartService {
             
             cartItemRepository.save(cartItem);
             log.info("Added new item to cart with id: {}", cartItem.getId());
+            return "Item added to cart successfully";
         }
     }
 
@@ -92,10 +86,63 @@ public class CartService {
 
     public List<CartItemResponse> getCartItems(String email) {
         log.info("Fetching cart for user {}", email);
-        return cartItemRepository.findAll().stream()
-            .filter(item -> item.getUser().getEmail().equals(email))
+        User user = userRepository.findByEmail(email)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
+
+        return cartItemRepository.findByUser(user).stream()
             .map(this::convertToCartItemResponse)
             .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public void updateCartItemQuantity(String email, String cartItemId, int quantity) {
+        if (email == null || cartItemId == null) {
+            throw new IllegalArgumentException("Email and cartItemId must not be null");
+        }
+        if (quantity < 1) {
+            throw new IllegalArgumentException("Quantity must be at least 1");
+        }
+
+        userRepository.findByEmail(email)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
+
+        CartItem cartItem = cartItemRepository.findById(cartItemId)
+            .orElseThrow(() -> new ResourceNotFoundException("Cart item not found with id: " + cartItemId));
+
+        if (!cartItem.getUser().getEmail().equals(email)) {
+            throw new UnauthorizedException("Cart item does not belong to user");
+        }
+
+        cartItem.setQuantity(quantity);
+        cartItemRepository.save(cartItem);
+        log.info("Updated quantity for cart item {} to {}", cartItemId, quantity);
+    }
+
+    @Transactional
+    public void clearCart(String email) {
+        if (email == null) {
+            throw new IllegalArgumentException("Email must not be null");
+        }
+
+        User user = userRepository.findByEmail(email)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
+
+        List<CartItem> userItems = cartItemRepository.findByUser(user);
+        if (!userItems.isEmpty()) {
+            cartItemRepository.deleteAll(userItems);
+            cartItemRepository.flush();
+        }
+        log.info("Cleared cart for user {}", email);
+    }
+
+    private CartItem findCartItemByVariant(User user, Long productId, String color, String provider, String size) {
+        return cartItemRepository.findByUser(user).stream()
+            .filter(item -> item.getProduct().getId().equals(productId)
+                && Objects.equals(item.getColor(), color)
+                && Objects.equals(item.getProvider(), provider)
+                && Objects.equals(item.getSize(), size))
+            .findFirst()
+            .orElse(null);
     }
 
     private CartItemResponse convertToCartItemResponse(CartItem cartItem) {
