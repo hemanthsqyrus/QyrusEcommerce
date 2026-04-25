@@ -1,59 +1,107 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import { useUser } from '../context/UserContext';
-import { useNavigate } from 'react-router-dom';
 
 const Cart = () => {
   const [cartItems, setCartItems] = useState([]);
-  const [selectedItems, setSelectedItems] = useState([]);
+  const [selectedItemIds, setSelectedItemIds] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { email } = useUser(); // Assuming email is available in UserContext
+  const [updatingItemId, setUpdatingItemId] = useState('');
+  const [clearingCart, setClearingCart] = useState(false);
+  const { email } = useUser();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchCartItems = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const { data } = await authAPI.getCart(email);
-        setCartItems(data.cart || []); // Correctly access `cart` key
-      } catch (err) {
-        setError('Failed to fetch cart details');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const fetchCartItems = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const { data } = await authAPI.getCart(email);
+      setCartItems(data.cart || []);
+    } catch (err) {
+      setError('Failed to fetch cart details');
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     if (email) {
       fetchCartItems();
     }
   }, [email]);
 
+  useEffect(() => {
+    setSelectedItemIds((prevIds) =>
+      prevIds.filter((id) => cartItems.some((item) => item.cart_item_id === id))
+    );
+  }, [cartItems]);
+
+  const selectedItems = useMemo(
+    () => cartItems.filter((item) => selectedItemIds.includes(item.cart_item_id)),
+    [cartItems, selectedItemIds]
+  );
+
   const handleRemoveItem = async (cartItemId) => {
+    setError('');
     try {
-      await authAPI.removeFromCart(email, cartItemId);
-      setCartItems((prevItems) =>
-        prevItems.filter((item) => item.cart_item_id !== cartItemId)
-      );
-      // Also remove from selected items if present
-      setSelectedItems((prevSelected) =>
-        prevSelected.filter((item) => item.cart_item_id !== cartItemId)
-      );
+      const { data } = await authAPI.removeFromCart(email, cartItemId);
+      if (Array.isArray(data?.cart)) {
+        setCartItems(data.cart);
+      } else {
+        setCartItems((prevItems) =>
+          prevItems.filter((item) => item.cart_item_id !== cartItemId)
+        );
+      }
+      setSelectedItemIds((prevIds) => prevIds.filter((id) => id !== cartItemId));
     } catch (err) {
       setError('Failed to remove item from cart');
     }
   };
 
-  const handleSelectItem = (item) => {
-    if (selectedItems.find((selected) => selected.cart_item_id === item.cart_item_id)) {
-      // Deselect the item
-      setSelectedItems((prevSelected) =>
-        prevSelected.filter((selected) => selected.cart_item_id !== item.cart_item_id)
-      );
-    } else {
-      // Select the item
-      setSelectedItems((prevSelected) => [...prevSelected, item]);
+  const handleSelectItem = (cartItemId) => {
+    setSelectedItemIds((prevIds) =>
+      prevIds.includes(cartItemId)
+        ? prevIds.filter((id) => id !== cartItemId)
+        : [...prevIds, cartItemId]
+    );
+  };
+
+  const handleQuantityChange = async (cartItemId, nextQuantity) => {
+    if (nextQuantity < 1) return;
+
+    setUpdatingItemId(cartItemId);
+    setError('');
+    try {
+      const { data } = await authAPI.updateCartItemQuantity(email, cartItemId, nextQuantity);
+      if (Array.isArray(data?.cart)) {
+        setCartItems(data.cart);
+      } else {
+        setCartItems((prevItems) =>
+          prevItems.map((item) =>
+            item.cart_item_id === cartItemId ? { ...item, quantity: nextQuantity } : item
+          )
+        );
+      }
+    } catch (err) {
+      setError('Failed to update quantity');
+    } finally {
+      setUpdatingItemId('');
+    }
+  };
+
+  const handleClearCart = async () => {
+    setClearingCart(true);
+    setError('');
+    try {
+      await authAPI.clearCart(email);
+      setCartItems([]);
+      setSelectedItemIds([]);
+    } catch (err) {
+      setError('Failed to clear cart');
+    } finally {
+      setClearingCart(false);
     }
   };
 
@@ -72,57 +120,100 @@ const Cart = () => {
   };
 
   const calculateTotalPrice = () => {
-    return selectedItems.reduce((total, item) => total + item.price * item.quantity, 0);
+    return selectedItems.reduce(
+      (total, item) => total + Number(item.price || 0) * Number(item.quantity || 0),
+      0
+    );
   };
 
   if (loading) return <div>Loading cart...</div>;
-  if (error) return <div className="text-red-500">{error}</div>;
 
   return (
     <div className="container mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-4">My Cart</h1>
+      {error ? <div className="mb-4 text-red-500">{error}</div> : null}
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-3xl font-bold">My Cart</h1>
+        <button
+          onClick={handleClearCart}
+          disabled={cartItems.length === 0 || clearingCart}
+          className="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+        >
+          {clearingCart ? 'Clearing...' : 'Clear Cart'}
+        </button>
+      </div>
+
       {cartItems.length > 0 ? (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {cartItems.map((item) => (
-              <div
-                key={item.cart_item_id}
-                className={`p-4 border rounded shadow hover:shadow-lg transition ${
-                  selectedItems.find((selected) => selected.cart_item_id === item.cart_item_id)
-                    ? 'border-blue-500'
-                    : ''
-                }`}
-                onClick={() => handleSelectItem(item)}
-              >
-                <img
-                  src={item.image}
-                  alt={item.name}
-                  className="w-full h-40 object-cover rounded"
-                />
-                <h2 className="text-xl font-bold mt-2">{item.name}</h2>
-                <p className="text-gray-700">Color: {item.color}</p>
-                <p className="text-gray-700">Size: {item.size}</p>
-                <p className="text-gray-700">Provider: {item.provider}</p>
-                <p className="text-gray-700">Quantity: {item.quantity}</p>
-                <p className="text-gray-700 font-bold">Price: ₹{item.price}</p>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation(); // Prevent triggering selection on button click
-                    handleRemoveItem(item.cart_item_id);
-                  }}
-                  className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            {cartItems.map((item) => {
+              const isSelected = selectedItemIds.includes(item.cart_item_id);
+              const isUpdatingThisItem = updatingItemId === item.cart_item_id;
+
+              return (
+                <div
+                  key={item.cart_item_id}
+                  className={`rounded border p-4 shadow transition hover:shadow-lg ${
+                    isSelected ? 'border-blue-500' : ''
+                  }`}
+                  onClick={() => handleSelectItem(item.cart_item_id)}
                 >
-                  Remove
-                </button>
-              </div>
-            ))}
+                  <img
+                    src={item.image}
+                    alt={item.name}
+                    className="h-40 w-full rounded object-cover"
+                  />
+                  <h2 className="mt-2 text-xl font-bold">{item.name}</h2>
+                  <p className="text-gray-700">Color: {item.color}</p>
+                  <p className="text-gray-700">Size: {item.size}</p>
+                  <p className="text-gray-700">Provider: {item.provider}</p>
+
+                  <div className="mt-2 flex items-center gap-3">
+                    <span className="text-gray-700">Quantity:</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleQuantityChange(item.cart_item_id, item.quantity - 1);
+                      }}
+                      disabled={item.quantity <= 1 || isUpdatingThisItem}
+                      className="rounded bg-gray-200 px-3 py-1 hover:bg-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      -
+                    </button>
+                    <span className="min-w-6 text-center">{item.quantity}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleQuantityChange(item.cart_item_id, item.quantity + 1);
+                      }}
+                      disabled={isUpdatingThisItem}
+                      className="rounded bg-gray-200 px-3 py-1 hover:bg-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  <p className="mt-2 font-bold text-gray-700">Price: ₹{item.price}</p>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveItem(item.cart_item_id);
+                    }}
+                    className="mt-4 rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+                  >
+                    Remove
+                  </button>
+                </div>
+              );
+            })}
           </div>
+
           <div className="mt-6">
             <h2 className="text-xl font-bold">Total Price: ₹{calculateTotalPrice()}</h2>
             <button
               onClick={handleCheckout}
               disabled={selectedItems.length === 0}
-              className="mt-4 px-6 py-3 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              className="mt-4 rounded bg-green-600 px-6 py-3 text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-300"
             >
               Checkout
             </button>
