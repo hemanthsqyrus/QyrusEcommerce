@@ -4,13 +4,11 @@ on:
   push:
     branches:
       - seer_common_stg
-    paths:
-      - 'QyrusEcommerceJavaBackend/**'
+
   pull_request:
     branches:
       - seer_common_stg
-    paths:
-      - 'QyrusEcommerceJavaBackend/**'
+
 
 jobs:
   send_code_changes:
