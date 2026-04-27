@@ -14,9 +14,6 @@ jobs:
   send_code_changes:
     runs-on: runner-for-qyrus-public
 
-    env:
-      MONITORED_PATH: QyrusEcommerceJavaBackend
-
     steps:
       # 1) Checkout with full history
       - name: Checkout code
