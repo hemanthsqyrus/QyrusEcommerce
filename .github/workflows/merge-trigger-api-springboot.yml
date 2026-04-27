@@ -50,7 +50,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git diff "${FROM_SHA}..${TO_SHA}" -- "${MONITORED_PATH}" > changes.txt || true
+          git diff "${FROM_SHA}..${TO_SHA}" > changes.txt
           ENCODED_CHANGES=$(jq -Rs . < changes.txt)
           echo "encoded_changes=$ENCODED_CHANGES" >> $GITHUB_ENV
 
