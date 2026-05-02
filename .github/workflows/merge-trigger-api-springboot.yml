@@ -172,5 +172,5 @@ jobs:
               exit 1
             fi
       
-          echo "✅ Successfully sent changes"
-          cat response.json || true
+        echo "✅ Successfully sent changes"
+        cat response.json || true
