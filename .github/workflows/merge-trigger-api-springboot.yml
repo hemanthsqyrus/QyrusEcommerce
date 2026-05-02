@@ -102,75 +102,76 @@ jobs:
       #     echo "✅ Gateway authentication successful"
 
       # 5) Send diff and metadata to Impact Analyzer
-      -   name: Send changes to Analyze API
-          shell: bash
-          env:
-            REPO_NAME: ${{ github.repository }}
-            GH_TOKEN: ${{ secrets.GH_TOKEN }}
-            USERNAME: ${{ secrets.USERNAME }}
-            PASSWORD: ${{ secrets.PASSWORD }}
-            WORKSPACE_NAME: ${{ secrets.WORKSPACE_NAME }}
-            SUITE_NAME: ${{ secrets.SUITE_NAME }}
-            ENVIRONMENT_NAME: ${{ secrets.ENVIRONMENT_NAME }}
-            GATEWAY_URL: ${{ secrets.GATEWAY_URL }}
-            GATEWAY_TOKEN: ${{ secrets.GATEWAY_TOKEN }}
-            QAPI_API_TOKEN: ${{ secrets.QAPI_API_TOKEN }}
-          run: |
-            set -euo pipefail
-        
-            BASE="${GATEWAY_URL%/}"
-            ANALYZE_URL="${BASE}/seer-common-producer/v1/analyze-impact"
-        
-            jq -n \
-              --arg repo "$REPO_NAME" \
-              --arg branch "$BRANCH_NAME" \
-              --slurpfile commits commits.json \
-              --rawfile changes changes.txt \
-              --arg username "$USERNAME" \
-              --arg password "$PASSWORD" \
-              --arg workspace_name "$WORKSPACE_NAME" \
-              --arg suite_name "$SUITE_NAME" \
-              --arg environment_name "$ENVIRONMENT_NAME" \
-              --arg qapi_api_token "$QAPI_API_TOKEN" \
-              --arg gh_token "$GH_TOKEN" \
-              '{
-                repository: $repo,
-                branch: $branch,
-                commit_ids: $commits[0],
-                changes: $changes,
-                qapi_username: $username,
-                qapi_password: $password,
-                qapi_workspace_name: $workspace_name,
-                qapi_suite_name: $suite_name,
-                qapi_environment_name: $environment_name,
-                qapi_api_token: $qapi_api_token,
-                github_token: $gh_token
-              }' > payload.json
-        
-            echo "Payload size:"
-            wc -c payload.json
-        
-            echo "Posting to $ANALYZE_URL"
-        
-            HTTP_CODE=$(curl -sS \
-              --connect-timeout 20 \
-              --max-time 300 \
-              --retry 2 \
-              --retry-delay 5 \
-              -o response.json \
-              -w "%{http_code}" \
-              -X POST "$ANALYZE_URL" \
-              -H "Content-Type: application/json" \
-              -H "Authorization: Bearer ${GATEWAY_TOKEN}" \
-              --data-binary @payload.json)
-        
-            echo "Response Code: $HTTP_CODE"
-        
-            if [[ "$HTTP_CODE" -lt 200 || "$HTTP_CODE" -ge 300 ]]; then
-              echo "❌ Error Response:"
-              cat response.json || true
-              exit 1
-            fi
+      - name: Send changes to Analyze API
+        shell: bash
+        env:
+          REPO_NAME: ${{ github.repository }}
+          BRANCH_NAME: seer_common_stg
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          USERNAME: ${{ secrets.USERNAME }}
+          PASSWORD: ${{ secrets.PASSWORD }}
+          WORKSPACE_NAME: ${{ secrets.WORKSPACE_NAME }}
+          SUITE_NAME: ${{ secrets.SUITE_NAME }}
+          ENVIRONMENT_NAME: ${{ secrets.ENVIRONMENT_NAME }}
+          GATEWAY_URL: ${{ secrets.GATEWAY_URL }}
+          GATEWAY_TOKEN: ${{ secrets.GATEWAY_TOKEN }}
+          QAPI_API_TOKEN: ${{ secrets.QAPI_API_TOKEN }}
+        run: |
+          set -euo pipefail
       
-            echo "✅ Successfully sent changes"
+          BASE="${GATEWAY_URL%/}"
+          ANALYZE_URL="${BASE}/seer-common-producer/v1/analyze-impact"
+      
+          jq -n \
+            --arg repo "$REPO_NAME" \
+            --arg branch "$BRANCH_NAME" \
+            --slurpfile commits commits.json \
+            --rawfile changes changes.txt \
+            --arg username "$USERNAME" \
+            --arg password "$PASSWORD" \
+            --arg workspace_name "$WORKSPACE_NAME" \
+            --arg suite_name "$SUITE_NAME" \
+            --arg environment_name "$ENVIRONMENT_NAME" \
+            --arg qapi_api_token "$QAPI_API_TOKEN" \
+            --arg gh_token "$GH_TOKEN" \
+            '{
+              repository: $repo,
+              branch: $branch,
+              commit_ids: $commits[0],
+              changes: $changes,
+              qapi_username: $username,
+              qapi_password: $password,
+              qapi_workspace_name: $workspace_name,
+              qapi_suite_name: $suite_name,
+              qapi_environment_name: $environment_name,
+              qapi_api_token: $qapi_api_token,
+              github_token: $gh_token
+            }' > payload.json
+      
+          echo "Payload size:"
+          wc -c payload.json
+      
+          echo "Posting to $ANALYZE_URL"
+      
+          HTTP_CODE=$(curl -sS \
+            --connect-timeout 20 \
+            --max-time 300 \
+            --retry 2 \
+            --retry-delay 5 \
+            -o response.json \
+            -w "%{http_code}" \
+            -X POST "$ANALYZE_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${GATEWAY_TOKEN}" \
+            --data-binary @payload.json)
+      
+          echo "Response Code: $HTTP_CODE"
+      
+          if [[ "$HTTP_CODE" -lt 200 || "$HTTP_CODE" -ge 300 ]]; then
+            echo "❌ Error Response:"
             cat response.json || true
+            exit 1
+          fi
+      
+          echo "✅ Successfully sent changes"
+          cat response.json || true
