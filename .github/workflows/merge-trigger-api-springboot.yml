@@ -102,7 +102,7 @@ jobs:
       #     echo "✅ Gateway authentication successful"
 
       # 5) Send diff and metadata to Impact Analyzer
-      -  name: Send changes to Analyze API
+      - name: Send changes to Analyze API
         shell: bash
         env:
           REPO_NAME: ${{ github.repository }}
