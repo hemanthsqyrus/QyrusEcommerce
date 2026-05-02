@@ -106,6 +106,7 @@ jobs:
         shell: bash
         env:
           REPO_NAME: ${{ github.repository }}
+          BRANCH_NAME: seer_common_stg
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           USERNAME: ${{ secrets.USERNAME }}
           PASSWORD: ${{ secrets.PASSWORD }}
