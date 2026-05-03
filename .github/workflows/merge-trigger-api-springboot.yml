@@ -4,20 +4,15 @@ on:
   push:
     branches:
       - seer_common_stg
-    paths:
-      - 'QyrusEcommerceJavaBackend/**'
+
   pull_request:
     branches:
       - seer_common_stg
-    paths:
-      - 'QyrusEcommerceJavaBackend/**'
+
 
 jobs:
   send_code_changes:
     runs-on: runner-for-qyrus-public
-
-    env:
-      MONITORED_PATH: QyrusEcommerceJavaBackend
 
     steps:
       # 1) Checkout with full history
@@ -33,7 +28,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
+      
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             FROM_SHA="${{ github.event.pull_request.base.sha }}"
             TO_SHA="${{ github.event.pull_request.head.sha }}"
@@ -41,13 +36,15 @@ jobs:
             FROM_SHA="${{ github.event.before }}"
             TO_SHA="${{ github.sha }}"
           fi
-
+      
           echo "FROM_SHA=$FROM_SHA" >> $GITHUB_ENV
           echo "TO_SHA=$TO_SHA" >> $GITHUB_ENV
-
-          COMMITS=$(git rev-list --reverse "${FROM_SHA}..${TO_SHA}")
-          COMMITS_JSON=$(printf "%s\n" "$COMMITS" | jq -R -s -c 'split("\n")[:-1]')
-          echo "commits=$COMMITS_JSON" >> $GITHUB_ENV
+      
+          git rev-list --reverse "${FROM_SHA}..${TO_SHA}" \
+            | jq -R -s -c 'split("\n")[:-1]' > commits.json
+      
+          echo "Commits:"
+          cat commits.json
 
       # 3) Get code diff
       - name: Get code changes (diff)
@@ -55,7 +52,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git diff "${FROM_SHA}..${TO_SHA}" -- "${MONITORED_PATH}" > changes.txt || true
+          git diff "${FROM_SHA}..${TO_SHA}" > changes.txt
           ENCODED_CHANGES=$(jq -Rs . < changes.txt)
           echo "encoded_changes=$ENCODED_CHANGES" >> $GITHUB_ENV
 
@@ -112,9 +109,7 @@ jobs:
         env:
           REPO_NAME: ${{ github.repository }}
           BRANCH_NAME: seer_common_stg
-          COMMIT_IDS: ${{ env.commits }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          ENCODED_CHANGES: ${{ env.encoded_changes }}
           USERNAME: ${{ secrets.USERNAME }}
           PASSWORD: ${{ secrets.PASSWORD }}
           WORKSPACE_NAME: ${{ secrets.WORKSPACE_NAME }}
@@ -125,14 +120,15 @@ jobs:
           QAPI_API_TOKEN: ${{ secrets.QAPI_API_TOKEN }}
         run: |
           set -euo pipefail
+      
           BASE="${GATEWAY_URL%/}"
           ANALYZE_URL="${BASE}/seer-common-producer/v1/analyze-impact"
-
-          PAYLOAD=$(jq -n \
+      
+          jq -n \
             --arg repo "$REPO_NAME" \
             --arg branch "$BRANCH_NAME" \
-            --arg commits "$COMMIT_IDS" \
-            --arg changes "$ENCODED_CHANGES" \
+            --slurpfile commits commits.json \
+            --rawfile changes changes.txt \
             --arg username "$USERNAME" \
             --arg password "$PASSWORD" \
             --arg workspace_name "$WORKSPACE_NAME" \
@@ -143,7 +139,7 @@ jobs:
             '{
               repository: $repo,
               branch: $branch,
-              commit_ids: $commits,
+              commit_ids: ($commits[0] | tostring),
               changes: $changes,
               qapi_username: $username,
               qapi_password: $password,
@@ -152,20 +148,32 @@ jobs:
               qapi_environment_name: $environment_name,
               qapi_api_token: $qapi_api_token,
               github_token: $gh_token
-            }')
-
+            }' > payload.json
+      
+          echo "Payload size:"
+          wc -c payload.json
+      
           echo "Posting to $ANALYZE_URL"
-          HTTP_CODE=$(curl -sS -o response.json -w "%{http_code}" \
+      
+          HTTP_CODE=$(curl -sS \
+            --connect-timeout 20 \
+            --max-time 300 \
+            --retry 2 \
+            --retry-delay 5 \
+            -o response.json \
+            -w "%{http_code}" \
             -X POST "$ANALYZE_URL" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${GATEWAY_TOKEN}" \
-            -d "$PAYLOAD")
-
+            --data-binary @payload.json)
+      
           echo "Response Code: $HTTP_CODE"
+      
           if [[ "$HTTP_CODE" -lt 200 || "$HTTP_CODE" -ge 300 ]]; then
             echo "❌ Error Response:"
-            cat response.json
+            cat response.json || true
             exit 1
           fi
-
+      
           echo "✅ Successfully sent changes"
+          cat response.json || true
