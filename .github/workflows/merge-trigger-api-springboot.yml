@@ -139,7 +139,7 @@ jobs:
             '{
               repository: $repo,
               branch: $branch,
-              commit_ids: $commits[0],
+              commit_ids: ($commits[0] | tostring),
               changes: $changes,
               qapi_username: $username,
               qapi_password: $password,
