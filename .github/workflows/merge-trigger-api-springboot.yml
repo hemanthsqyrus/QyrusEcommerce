@@ -28,7 +28,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
+      
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             FROM_SHA="${{ github.event.pull_request.base.sha }}"
             TO_SHA="${{ github.event.pull_request.head.sha }}"
@@ -36,13 +36,15 @@ jobs:
             FROM_SHA="${{ github.event.before }}"
             TO_SHA="${{ github.sha }}"
           fi
-
+      
           echo "FROM_SHA=$FROM_SHA" >> $GITHUB_ENV
           echo "TO_SHA=$TO_SHA" >> $GITHUB_ENV
-
-          COMMITS=$(git rev-list --reverse "${FROM_SHA}..${TO_SHA}")
-          COMMITS_JSON=$(printf "%s\n" "$COMMITS" | jq -R -s -c 'split("\n")[:-1]')
-          echo "commits=$COMMITS_JSON" >> $GITHUB_ENV
+      
+          git rev-list --reverse "${FROM_SHA}..${TO_SHA}" \
+            | jq -R -s -c 'split("\n")[:-1]' > commits.json
+      
+          echo "Commits:"
+          cat commits.json
 
       # 3) Get code diff
       - name: Get code changes (diff)
@@ -137,7 +139,7 @@ jobs:
             '{
               repository: $repo,
               branch: $branch,
-              commit_ids: $commits[0],
+              commit_ids: ($commits[0] | tostring),
               changes: $changes,
               qapi_username: $username,
               qapi_password: $password,
