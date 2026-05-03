@@ -23,7 +23,7 @@ jobs:
           token: ${{ secrets.GH_TOKEN }}
 
       # 2) Compute commit range
-      -  name: Compute commit range & list
+      - name: Compute commit range & list
         id: range
         shell: bash
         run: |
