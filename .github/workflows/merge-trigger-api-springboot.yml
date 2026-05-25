@@ -177,3 +177,88 @@ jobs:
       
           echo "✅ Successfully sent changes"
           cat response.json || true
+
+          JOB_ID=$(jq -r '.job_id // .jobId // .id // empty' response.json)
+
+          if [[ -z "$JOB_ID" || "$JOB_ID" == "null" ]]; then
+            echo "❌ job_id not found in Analyze API response"
+            cat response.json || true
+            exit 1
+          fi
+
+          echo "✅ Received job_id: $JOB_ID"
+
+          echo "JOB_ID=$JOB_ID" >> "$GITHUB_ENV"
+
+      # 6) Poll analysis status
+      - name: Poll Analyze Impact Status
+        shell: bash
+        env:
+          GATEWAY_URL: ${{ secrets.GATEWAY_URL }}
+          GATEWAY_TOKEN: ${{ secrets.GATEWAY_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          BASE="${GATEWAY_URL%/}"
+          STATUS_URL="${BASE}/seer-common-producer/v1/analysis-status/${JOB_ID}"
+
+          echo "Polling status for job_id: $JOB_ID"
+          echo "Status URL: $STATUS_URL"
+
+          MAX_ATTEMPTS=60
+          SLEEP_SECONDS=10
+
+          for ATTEMPT in $(seq 1 "$MAX_ATTEMPTS"); do
+            echo "Polling attempt $ATTEMPT/$MAX_ATTEMPTS..."
+
+            HTTP_CODE=$(curl -sS \
+              --connect-timeout 20 \
+              --max-time 60 \
+              --retry 2 \
+              --retry-delay 5 \
+              -o status_response.json \
+              -w "%{http_code}" \
+              -X GET "$STATUS_URL" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${GATEWAY_TOKEN}")
+
+            echo "Status Response Code: $HTTP_CODE"
+
+            if [[ "$HTTP_CODE" -lt 200 || "$HTTP_CODE" -ge 300 ]]; then
+              echo "❌ Error while checking analysis status:"
+              cat status_response.json || true
+              exit 1
+            fi
+
+            cat status_response.json || true
+
+            STATUS=$(jq -r '.status // .state // .analysis_status // empty' status_response.json | tr '[:lower:]' '[:upper:]')
+
+            if [[ -z "$STATUS" ]]; then
+              echo "❌ Status field not found in response"
+              cat status_response.json || true
+              exit 1
+            fi
+
+            echo "Current status: $STATUS"
+
+            if [[ "$STATUS" == "COMPLETED" || "$STATUS" == "SUCCESS" || "$STATUS" == "SUCCEEDED" ]]; then
+              echo "✅ Analysis completed successfully"
+              exit 0
+            fi
+
+            if [[ "$STATUS" == "FAILED" || "$STATUS" == "ERROR" || "$STATUS" == "CANCELLED" ]]; then
+              echo "❌ Analysis failed with status: $STATUS"
+              cat status_response.json || true
+              exit 1
+            fi
+
+            echo "Analysis still running. Sleeping for ${SLEEP_SECONDS}s..."
+            sleep "$SLEEP_SECONDS"
+          done
+
+          echo "❌ Analysis polling timed out after $((MAX_ATTEMPTS * SLEEP_SECONDS)) seconds"
+          exit 1
+      
+          echo "✅ Successfully sent changes"
+          cat response.json || true
