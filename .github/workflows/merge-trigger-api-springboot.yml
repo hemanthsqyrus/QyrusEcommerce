@@ -178,17 +178,17 @@ jobs:
           echo "✅ Successfully sent changes"
           cat response.json || true
 
-          JOB_ID=$(jq -r '.job_id // .jobId // .id // empty' response.json)
+          IMPACT_ANALYSIS_ID=$(jq -r '.impact_analysis_id // empty' response.json)
 
-          if [[ -z "$JOB_ID" || "$JOB_ID" == "null" ]]; then
-            echo "❌ job_id not found in Analyze API response"
+          if [[ -z "$IMPACT_ANALYSIS_ID" || "$IMPACT_ANALYSIS_ID" == "null" ]]; then
+            echo "❌ impact_analysis_id not found in Analyze API response"
             cat response.json || true
             exit 1
           fi
 
-          echo "✅ Received job_id: $JOB_ID"
+          echo "✅ Received impact_analysis_id: $IMPACT_ANALYSIS_ID"
 
-          echo "JOB_ID=$JOB_ID" >> "$GITHUB_ENV"
+          echo "JOB_ID=$IMPACT_ANALYSIS_ID" >> "$GITHUB_ENV"
 
       # 6) Poll analysis status
       - name: Poll Analyze Impact Status
