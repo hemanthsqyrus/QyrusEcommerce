@@ -3,11 +3,11 @@ name: Send Code Changes on Push
 on:
   push:
     branches:
-      - copy/staging
+      - seer_common_stg
  
   pull_request:
     branches:
-      - copy/staging
+      - seer_common_stg
  
 jobs:
   send_code_changes:
@@ -56,7 +56,7 @@ jobs:
         shell: bash
         env:
           REPO_NAME: ${{ github.repository }}
-          BRANCH_NAME: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
+          BRANCH_NAME: seer_common_stg
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
  
           GATEWAY_URL: ${{ secrets.GATEWAY_URL }}
