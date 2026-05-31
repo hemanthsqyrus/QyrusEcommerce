@@ -1,31 +1,28 @@
 name: Send Code Changes on Push
- 
+
 on:
   push:
     branches:
       - seer_common_stg
- 
   pull_request:
     branches:
       - seer_common_stg
- 
+
 jobs:
   send_code_changes:
-    runs-on: ubuntu-latest
- 
+    runs-on: runner-for-qyrus
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GH_TOKEN }}
- 
-      - name: Compute commit range & list
-        id: range
+
+      - name: Compute commit range
         shell: bash
         run: |
           set -euo pipefail
- 
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             FROM_SHA="${{ github.event.pull_request.base.sha }}"
             TO_SHA="${{ github.event.pull_request.head.sha }}"
@@ -33,75 +30,71 @@ jobs:
             FROM_SHA="${{ github.event.before }}"
             TO_SHA="${{ github.sha }}"
           fi
- 
-          echo "FROM_SHA=$FROM_SHA" >> $GITHUB_ENV
-          echo "TO_SHA=$TO_SHA" >> $GITHUB_ENV
- 
+          echo "FROM_SHA=$FROM_SHA" >> "$GITHUB_ENV"
+          echo "TO_SHA=$TO_SHA" >> "$GITHUB_ENV"
           git rev-list --reverse "${FROM_SHA}..${TO_SHA}" \
             | jq -R -s -c 'split("\n")[:-1]' > commits.json
- 
-          echo "Commits:"
-          cat commits.json
- 
+
       - name: Get code changes (diff)
-        id: diff
         shell: bash
         run: |
           set -euo pipefail
           git diff "${FROM_SHA}..${TO_SHA}" > changes.txt
-          ENCODED_CHANGES=$(jq -Rs . < changes.txt)
-          echo "encoded_changes=$ENCODED_CHANGES" >> $GITHUB_ENV
- 
-      - name: Send changes to Analyze API
+
+      - name: Send changes to Analyze API (COMBINED mode)
         shell: bash
         env:
           REPO_NAME: ${{ github.repository }}
-          BRANCH_NAME: seer_common_stg
+          # Feature/source branch for Seer (PR head on pull_request, ref name on push).
+          BRANCH_NAME: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
- 
           GATEWAY_URL: ${{ secrets.GATEWAY_URL }}
           GATEWAY_TOKEN: ${{ secrets.GATEWAY_TOKEN }}
+          API_API_TOKEN: ${{ secrets.QYRUS_AI_TOKEN }}
+          API_WORKSPACE_NAME: ${{ secrets.WORKSPACE_NAME }}
+          API_SUITE_NAME: ${{ secrets.SUITE_NAME }}
+          API_ENVIRONMENT_NAME: ${{ secrets.ENVIRONMENT_NAME }}
           QYRUS_AI_TOKEN: ${{ secrets.QYRUS_AI_TOKEN }}
- 
           WEB_TEAM_NAME: ${{ secrets.WEB_TEAM_NAME }}
           WEB_PROJECT_NAME: ${{ secrets.WEB_PROJECT_NAME }}
           WEB_SUITE_NAME: ${{ secrets.WEB_SUITE_NAME }}
           WEB_RUN_CONFIGURATION_NAME: ${{ secrets.WEB_RUN_CONFIGURATION_NAME }}
         run: |
           set -euo pipefail
- 
-          BASE="${GATEWAY_URL%/}"
-          ANALYZE_URL="${BASE}/analyze-impact"
- 
+          ANALYZE_URL="${GATEWAY_URL%/}/seer-common-producer/v1/analyze-impact"
+
           jq -n \
             --arg repo "$REPO_NAME" \
             --arg branch "$BRANCH_NAME" \
             --slurpfile commits commits.json \
             --rawfile changes changes.txt \
             --arg gh_token "$GH_TOKEN" \
+            --arg api_api_token "$API_API_TOKEN" \
+            --arg api_workspace_name "$API_WORKSPACE_NAME" \
+            --arg api_suite_name "$API_SUITE_NAME" \
+            --arg api_environment_name "$API_ENVIRONMENT_NAME" \
+            --arg qyrus_api_token "$QYRUS_AI_TOKEN" \
             --arg web_team_name "$WEB_TEAM_NAME" \
             --arg web_project_name "$WEB_PROJECT_NAME" \
             --arg web_suite_name "$WEB_SUITE_NAME" \
             --arg web_run_configuration_name "$WEB_RUN_CONFIGURATION_NAME" \
-            --arg qyrus_api_token "$QYRUS_AI_TOKEN" \
             '{
               repository: $repo,
               branch: $branch,
               commit_ids: ($commits[0] | tostring),
               changes: $changes,
               github_token: $gh_token,
+              qapi_api_token: $api_api_token,
+              qapi_workspace_name: $api_workspace_name,
+              qapi_suite_name: $api_suite_name,
+              qapi_environment_name: $api_environment_name,
+              qyrus_api_token: $qyrus_api_token,
               web_team_name: $web_team_name,
               web_project_name: $web_project_name,
               web_suite_name: $web_suite_name,
-              web_run_configuration_name: $web_run_configuration_name,
-              qyrus_api_token: $qyrus_api_token
+              web_run_configuration_name: $web_run_configuration_name
             }' > payload.json
- 
-          echo "Branch sent to Analyze API (from PR head or push ref): $BRANCH_NAME"
-          echo "Posting to $ANALYZE_URL"
-          wc -c payload.json
-          cat payload.json
- 
+
           HTTP_CODE=$(curl -sS \
             --connect-timeout 20 \
             --max-time 300 \
@@ -113,16 +106,11 @@ jobs:
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${GATEWAY_TOKEN}" \
             -H "github-token: ${GH_TOKEN}" \
-            -H "ngrok-skip-browser-warning: true" \
             --data-binary @payload.json)
- 
+
           echo "Response Code: $HTTP_CODE"
- 
           if [[ "$HTTP_CODE" -lt 200 || "$HTTP_CODE" -ge 300 ]]; then
-            echo "❌ Error Response:"
             cat response.json || true
             exit 1
           fi
- 
-          echo "✅ Successfully sent changes"
           cat response.json || true
