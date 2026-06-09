@@ -51,7 +51,7 @@ jobs:
           GATEWAY_TOKEN: ${{ secrets.GATEWAY_TOKEN }}
 
           # API Enterprise (when QYRUS_ENABLED=true on consumer)
-          QYRUS_AI_TOKEN: ${{ secrets.QYRUS_AI_TOKEN }}
+          QYRUS_API_TOKEN: ${{ secrets.QYRUS_API_DUMMY }}
           API_ENTERPRISE_TEAM_NAME: ${{ secrets.API_ENTERPRISE_TEAM_NAME }}
           API_ENTERPRISE_PROJECT_NAME: ${{ secrets.API_ENTERPRISE_PROJECT_NAME }}
           API_ENTERPRISE_SUITE_NAME: ${{ secrets.API_ENTERPRISE_SUITE_NAME }}
@@ -74,7 +74,7 @@ jobs:
             --slurpfile commits commits.json \
             --rawfile changes changes.txt \
             --arg gh_token "$GH_TOKEN" \
-            --arg qyrus_api_token "$QYRUS_AI_TOKEN" \
+            --arg qyrus_api_token "$QYRUS_API_TOKEN" \
             --arg api_enterprise_team_name "$API_ENTERPRISE_TEAM_NAME" \
             --arg api_enterprise_project_name "$API_ENTERPRISE_PROJECT_NAME" \
             --arg api_enterprise_suite_name "$API_ENTERPRISE_SUITE_NAME" \
