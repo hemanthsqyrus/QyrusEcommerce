@@ -64,8 +64,9 @@ jobs:
           WEB_RUN_CONFIGURATION_NAME: ${{ secrets.WEB_RUN_CONFIGURATION_NAME }}
         run: |
           set -euo pipefail
-          ANALYZE_URL="${GATEWAY_URL%/}/seer-common-producer/v1/analyze-impact"
-          # Local ngrok: ANALYZE_URL="${GATEWAY_URL%/}/analyze-impact"
+
+          BASE="${GATEWAY_URL%/}"
+          ANALYZE_URL="${BASE}/analyze-impact"
 
           jq -n \
             --arg repo "$REPO_NAME" \
