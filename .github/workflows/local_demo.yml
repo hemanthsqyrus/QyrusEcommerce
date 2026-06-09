@@ -10,7 +10,7 @@ on:
 
 jobs:
   send_code_changes:
-    runs-on: runner-for-qyrus
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
