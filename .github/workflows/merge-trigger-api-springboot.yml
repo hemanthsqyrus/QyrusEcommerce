@@ -100,7 +100,12 @@ jobs:
               web_run_configuration_name: $web_run_configuration_name
             }' > payload.json
 
-           HTTP_CODE=$(curl -sS \
+          echo "Branch sent to Analyze API (from PR head or push ref): $BRANCH_NAME"
+          echo "Posting to $ANALYZE_URL"
+          wc -c payload.json
+          cat payload.json
+
+          HTTP_CODE=$(curl -sS \
             --connect-timeout 20 \
             --max-time 300 \
             --retry 2 \
@@ -123,3 +128,4 @@ jobs:
 
           echo "✅ Successfully sent changes"
           cat response.json || true
+
