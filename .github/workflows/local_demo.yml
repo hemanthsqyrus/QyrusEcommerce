@@ -64,7 +64,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          BASE="${GATEWAY_URL%/}"
           ANALYZE_URL="https://stg-gateway.qyrus.com:8243/seer-common-produce-noauth/v1/analyze-impact"
 
           jq -n \
