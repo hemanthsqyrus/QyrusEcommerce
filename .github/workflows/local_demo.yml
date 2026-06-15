@@ -3,11 +3,11 @@ name: Send Web and API Enterprise Code Changes on Push
 on:
   push:
     branches:
-      - main
+      - seer_common_stg
 
   pull_request:
     branches:
-      - main
+      - seer_common_stg
 
 jobs:
   send_web_api_enterprise_code_changes:
