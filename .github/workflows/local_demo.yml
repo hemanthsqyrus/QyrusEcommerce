@@ -64,7 +64,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # ANALYZE_URL="https://carrousel-crinkly-rack.ngrok-free.dev/analyze-impact"
           ANALYZE_URL="https://stg-gateway.qyrus.com:8243/seer-common-produce-noauth/v1/analyze-impact"
 
           jq -n \
@@ -109,7 +108,6 @@ jobs:
             -X POST "$ANALYZE_URL" \
             -H "Content-Type: application/json" \
             -H "github-token: ${GH_TOKEN}" \
-            # -H "ngrok-skip-browser-warning: true" \
             --data-binary @payload.json)
 
           echo "Response Code: $HTTP_CODE"
