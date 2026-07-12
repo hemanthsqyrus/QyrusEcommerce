@@ -10,7 +10,7 @@ on:
 
 jobs:
   send_code_changes:
-    runs-on: runner-for-qyrus
+    runs-on: runner-for-qyrus-public
 
     steps:
       - name: Checkout code
