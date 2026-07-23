@@ -130,7 +130,7 @@ on:
 
 jobs:
   send_code_changes:
-    runs-on: runner-for-qyrus-public
+    runs-on: ubuntu-latest
     timeout-minutes: 45
 
     steps:
@@ -186,7 +186,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          ANALYZE_URL="https://stg-gateway.qyrus.com:8243/seer-common-produce-noauth/v1/analyze-impact"
+          # ANALYZE_URL="https://stg-gateway.qyrus.com:8243/seer-common-produce-noauth/v1/analyze-impact"
+          ANALYZE_URL="${ANALYZE_URL:-https://carrousel-crinkly-rack.ngrok-free.dev/analyze-impact}"
 
           jq -n \
             --arg repo "$REPO_NAME" \
