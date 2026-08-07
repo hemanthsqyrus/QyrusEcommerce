@@ -1,3 +1,123 @@
+# # name: Send Code Changes on Push
+
+# # on:
+# #   push:
+# #     branches:
+# #       - seer_common_stg
+# #   pull_request:
+# #     branches:
+# #       - seer_common_stg
+
+# # jobs:
+# #   send_code_changes:
+# #     runs-on: runner-for-qyrus-public
+
+# #     steps:
+# #       - name: Checkout code
+# #         uses: actions/checkout@v4
+# #         with:
+# #           fetch-depth: 0
+# #           token: ${{ secrets.GH_TOKEN }}
+
+# #       - name: Compute commit range
+# #         shell: bash
+# #         run: |
+# #           set -euo pipefail
+# #           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+# #             FROM_SHA="${{ github.event.pull_request.base.sha }}"
+# #             TO_SHA="${{ github.event.pull_request.head.sha }}"
+# #           else
+# #             FROM_SHA="${{ github.event.before }}"
+# #             TO_SHA="${{ github.sha }}"
+# #           fi
+# #           echo "FROM_SHA=$FROM_SHA" >> "$GITHUB_ENV"
+# #           echo "TO_SHA=$TO_SHA" >> "$GITHUB_ENV"
+# #           git rev-list --reverse "${FROM_SHA}..${TO_SHA}" \
+# #             | jq -R -s -c 'split("\n")[:-1]' > commits.json
+
+# #       - name: Get code changes (diff)
+# #         shell: bash
+# #         run: |
+# #           set -euo pipefail
+# #           git diff "${FROM_SHA}..${TO_SHA}" > changes.txt
+
+# #       - name: Send changes to Analyze API (COMBINED mode)
+# #         shell: bash
+# #         env:
+# #           REPO_NAME: ${{ github.repository }}
+# #           BRANCH_NAME: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
+# #           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+# #           # API Enterprise (when QYRUS_ENABLED=true on consumer)
+# #           QYRUS_API_TOKEN: ${{ secrets.QYRUS_API_TOKEN }}
+          
+# #           API_ENTERPRISE_TEAM_NAME: ${{ secrets.API_ENTERPRISE_TEAM_NAME }}
+# #           API_ENTERPRISE_PROJECT_NAME: ${{ secrets.API_ENTERPRISE_PROJECT_NAME }}
+# #           API_ENTERPRISE_SUITE_NAME: ${{ secrets.API_ENTERPRISE_SUITE_NAME }}
+# #           API_ENTERPRISE_ENVIRONMENT_NAME: ${{ secrets.API_ENTERPRISE_ENVIRONMENT_NAME }}
+
+# #           # Web
+# #           WEB_TEAM_NAME: ${{ secrets.WEB_TEAM_NAME }}
+# #           WEB_PROJECT_NAME: ${{ secrets.WEB_PROJECT_NAME }}
+# #           WEB_SUITE_NAME: ${{ secrets.WEB_SUITE_NAME }}
+# #           WEB_RUN_CONFIGURATION_NAME: ${{ secrets.WEB_RUN_CONFIGURATION_NAME }}
+# #         run: |
+# #           set -euo pipefail
+
+# #           ANALYZE_URL="https://stg-gateway.qyrus.com:8243/seer-common-produce-noauth/v1/analyze-impact"
+
+# #           jq -n \
+# #             --arg repo "$REPO_NAME" \
+# #             --arg branch "$BRANCH_NAME" \
+# #             --slurpfile commits commits.json \
+# #             --rawfile changes changes.txt \
+# #             --arg gh_token "$GH_TOKEN" \
+# #             --arg qyrus_api_token "$QYRUS_API_TOKEN" \
+# #             --arg api_enterprise_team_name "$API_ENTERPRISE_TEAM_NAME" \
+# #             --arg api_enterprise_project_name "$API_ENTERPRISE_PROJECT_NAME" \
+# #             --arg api_enterprise_suite_name "$API_ENTERPRISE_SUITE_NAME" \
+# #             --arg api_enterprise_environment_name "$API_ENTERPRISE_ENVIRONMENT_NAME" \
+# #             --arg web_team_name "$WEB_TEAM_NAME" \
+# #             --arg web_project_name "$WEB_PROJECT_NAME" \
+# #             --arg web_suite_name "$WEB_SUITE_NAME" \
+# #             --arg web_run_configuration_name "$WEB_RUN_CONFIGURATION_NAME" \
+# #             '{
+# #               repository: $repo,
+# #               branch: $branch,
+# #               commit_ids: ($commits[0] | tostring),
+# #               changes: $changes,
+# #               github_token: $gh_token,
+# #               qyrus_api_token: $qyrus_api_token,
+# #               api_enterprise_team_name: $api_enterprise_team_name,
+# #               api_enterprise_project_name: $api_enterprise_project_name,
+# #               api_enterprise_suite_name: $api_enterprise_suite_name,
+# #               api_enterprise_environment_name: $api_enterprise_environment_name,
+# #               web_team_name: $web_team_name,
+# #               web_project_name: $web_project_name,
+# #               web_suite_name: $web_suite_name,
+# #               web_run_configuration_name: $web_run_configuration_name
+# #             }' > payload.json
+
+# #           HTTP_CODE=$(curl -sS \
+# #             --connect-timeout 20 \
+# #             --max-time 300 \
+# #             --retry 2 \
+# #             --retry-delay 5 \
+# #             -o response.json \
+# #             -w "%{http_code}" \
+# #             -X POST "$ANALYZE_URL" \
+# #             -H "Content-Type: application/json" \
+# #             -H "github-token: ${GH_TOKEN}" \
+# #             --data-binary @payload.json)
+
+# #           echo "Response Code: $HTTP_CODE"
+# #           if [[ "$HTTP_CODE" -lt 200 || "$HTTP_CODE" -ge 300 ]]; then
+# #             cat response.json || true
+# #             exit 1
+# #           fi
+# #           cat response.json || true
+
+
 # name: Send Code Changes on Push
 
 # on:
@@ -10,7 +130,8 @@
 
 # jobs:
 #   send_code_changes:
-#     runs-on: runner-for-qyrus-public
+#     runs-on: ubuntu-latest
+#     timeout-minutes: 45
 
 #     steps:
 #       - name: Checkout code
@@ -23,6 +144,7 @@
 #         shell: bash
 #         run: |
 #           set -euo pipefail
+
 #           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
 #             FROM_SHA="${{ github.event.pull_request.base.sha }}"
 #             TO_SHA="${{ github.event.pull_request.head.sha }}"
@@ -30,33 +152,33 @@
 #             FROM_SHA="${{ github.event.before }}"
 #             TO_SHA="${{ github.sha }}"
 #           fi
+
 #           echo "FROM_SHA=$FROM_SHA" >> "$GITHUB_ENV"
 #           echo "TO_SHA=$TO_SHA" >> "$GITHUB_ENV"
+
 #           git rev-list --reverse "${FROM_SHA}..${TO_SHA}" \
 #             | jq -R -s -c 'split("\n")[:-1]' > commits.json
 
-#       - name: Get code changes (diff)
+#       - name: Get code changes diff
 #         shell: bash
 #         run: |
 #           set -euo pipefail
 #           git diff "${FROM_SHA}..${TO_SHA}" > changes.txt
 
-#       - name: Send changes to Analyze API (COMBINED mode)
+#       - name: Send changes to Analyze API COMBINED mode
 #         shell: bash
 #         env:
 #           REPO_NAME: ${{ github.repository }}
 #           BRANCH_NAME: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
 #           GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
-#           # API Enterprise (when QYRUS_ENABLED=true on consumer)
 #           QYRUS_API_TOKEN: ${{ secrets.QYRUS_API_TOKEN }}
-          
+
 #           API_ENTERPRISE_TEAM_NAME: ${{ secrets.API_ENTERPRISE_TEAM_NAME }}
 #           API_ENTERPRISE_PROJECT_NAME: ${{ secrets.API_ENTERPRISE_PROJECT_NAME }}
 #           API_ENTERPRISE_SUITE_NAME: ${{ secrets.API_ENTERPRISE_SUITE_NAME }}
 #           API_ENTERPRISE_ENVIRONMENT_NAME: ${{ secrets.API_ENTERPRISE_ENVIRONMENT_NAME }}
 
-#           # Web
 #           WEB_TEAM_NAME: ${{ secrets.WEB_TEAM_NAME }}
 #           WEB_PROJECT_NAME: ${{ secrets.WEB_PROJECT_NAME }}
 #           WEB_SUITE_NAME: ${{ secrets.WEB_SUITE_NAME }}
@@ -64,7 +186,8 @@
 #         run: |
 #           set -euo pipefail
 
-#           ANALYZE_URL="https://stg-gateway.qyrus.com:8243/seer-common-produce-noauth/v1/analyze-impact"
+#           # ANALYZE_URL="https://stg-gateway.qyrus.com:8243/seer-common-produce-noauth/v1/analyze-impact"
+#           ANALYZE_URL="${ANALYZE_URL:-https://carrousel-crinkly-rack.ngrok-free.dev/analyze-impact}"
 
 #           jq -n \
 #             --arg repo "$REPO_NAME" \
@@ -108,201 +231,78 @@
 #             -X POST "$ANALYZE_URL" \
 #             -H "Content-Type: application/json" \
 #             -H "github-token: ${GH_TOKEN}" \
+#             -H "ngrok-skip-browser-warning: true" \
 #             --data-binary @payload.json)
 
 #           echo "Response Code: $HTTP_CODE"
+
 #           if [[ "$HTTP_CODE" -lt 200 || "$HTTP_CODE" -ge 300 ]]; then
 #             cat response.json || true
 #             exit 1
 #           fi
+
 #           cat response.json || true
 
+#           ANALYSIS_JOB_ID=$(jq -r '.impact_analysis_id // .job_id // empty' response.json)
 
-name: Send Code Changes on Push
+#           if [[ -z "$ANALYSIS_JOB_ID" ]]; then
+#             echo "Analyze API response did not include impact_analysis_id/job_id"
+#             exit 1
+#           fi
 
-on:
-  push:
-    branches:
-      - seer_common_stg
-  pull_request:
-    branches:
-      - seer_common_stg
+#           echo "ANALYSIS_JOB_ID=$ANALYSIS_JOB_ID" >> "$GITHUB_ENV"
+#           echo "Analysis job id: $ANALYSIS_JOB_ID"
 
-jobs:
-  send_code_changes:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+#       - name: Wait for analysis status
+#         shell: bash
+#         env:
+#           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+#         run: |
+#           set -euo pipefail
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GH_TOKEN }}
+#           STATUS_URL="https://stg-gateway.qyrus.com:8243/seer-common-produce-noauth/v1/analysis-status/${ANALYSIS_JOB_ID}"
+#           DEADLINE=$((SECONDS + 45 * 60))
+#           INTERVAL_SECONDS=30
 
-      - name: Compute commit range
-        shell: bash
-        run: |
-          set -euo pipefail
+#           echo "Polling analysis status: $STATUS_URL"
 
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            FROM_SHA="${{ github.event.pull_request.base.sha }}"
-            TO_SHA="${{ github.event.pull_request.head.sha }}"
-          else
-            FROM_SHA="${{ github.event.before }}"
-            TO_SHA="${{ github.sha }}"
-          fi
+#           while (( SECONDS < DEADLINE )); do
+#             HTTP_CODE=$(curl -sS \
+#               --connect-timeout 20 \
+#               --max-time 60 \
+#               -o status.json \
+#               -w "%{http_code}" \
+#               -H "github-token: ${GH_TOKEN}" \
+#               -H "ngrok-skip-browser-warning: true" \
+#               "$STATUS_URL" || true)
 
-          echo "FROM_SHA=$FROM_SHA" >> "$GITHUB_ENV"
-          echo "TO_SHA=$TO_SHA" >> "$GITHUB_ENV"
+#             echo "Status HTTP Code: $HTTP_CODE"
 
-          git rev-list --reverse "${FROM_SHA}..${TO_SHA}" \
-            | jq -R -s -c 'split("\n")[:-1]' > commits.json
+#             if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
+#               STATUS=$(jq -r '.status // "unknown"' status.json)
+#               PHASE=$(jq -r '.phase_name // empty' status.json)
+#               TITLE=$(jq -r '.status_title // empty' status.json)
 
-      - name: Get code changes diff
-        shell: bash
-        run: |
-          set -euo pipefail
-          git diff "${FROM_SHA}..${TO_SHA}" > changes.txt
+#               echo "Analysis status: $STATUS $PHASE $TITLE"
+#               cat status.json || true
 
-      - name: Send changes to Analyze API COMBINED mode
-        shell: bash
-        env:
-          REPO_NAME: ${{ github.repository }}
-          BRANCH_NAME: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+#               case "$STATUS" in
+#                 completed|complete|success|succeeded)
+#                   echo "Analysis completed"
+#                   exit 0
+#                   ;;
+#                 failed|error|cancelled|canceled)
+#                   echo "Analysis failed"
+#                   exit 1
+#                   ;;
+#               esac
+#             else
+#               cat status.json || true
+#             fi
 
-          QYRUS_API_TOKEN: ${{ secrets.QYRUS_API_TOKEN }}
+#             sleep "$INTERVAL_SECONDS"
+#           done
 
-          API_ENTERPRISE_TEAM_NAME: ${{ secrets.API_ENTERPRISE_TEAM_NAME }}
-          API_ENTERPRISE_PROJECT_NAME: ${{ secrets.API_ENTERPRISE_PROJECT_NAME }}
-          API_ENTERPRISE_SUITE_NAME: ${{ secrets.API_ENTERPRISE_SUITE_NAME }}
-          API_ENTERPRISE_ENVIRONMENT_NAME: ${{ secrets.API_ENTERPRISE_ENVIRONMENT_NAME }}
-
-          WEB_TEAM_NAME: ${{ secrets.WEB_TEAM_NAME }}
-          WEB_PROJECT_NAME: ${{ secrets.WEB_PROJECT_NAME }}
-          WEB_SUITE_NAME: ${{ secrets.WEB_SUITE_NAME }}
-          WEB_RUN_CONFIGURATION_NAME: ${{ secrets.WEB_RUN_CONFIGURATION_NAME }}
-        run: |
-          set -euo pipefail
-
-          # ANALYZE_URL="https://stg-gateway.qyrus.com:8243/seer-common-produce-noauth/v1/analyze-impact"
-          ANALYZE_URL="${ANALYZE_URL:-https://carrousel-crinkly-rack.ngrok-free.dev/analyze-impact}"
-
-          jq -n \
-            --arg repo "$REPO_NAME" \
-            --arg branch "$BRANCH_NAME" \
-            --slurpfile commits commits.json \
-            --rawfile changes changes.txt \
-            --arg gh_token "$GH_TOKEN" \
-            --arg qyrus_api_token "$QYRUS_API_TOKEN" \
-            --arg api_enterprise_team_name "$API_ENTERPRISE_TEAM_NAME" \
-            --arg api_enterprise_project_name "$API_ENTERPRISE_PROJECT_NAME" \
-            --arg api_enterprise_suite_name "$API_ENTERPRISE_SUITE_NAME" \
-            --arg api_enterprise_environment_name "$API_ENTERPRISE_ENVIRONMENT_NAME" \
-            --arg web_team_name "$WEB_TEAM_NAME" \
-            --arg web_project_name "$WEB_PROJECT_NAME" \
-            --arg web_suite_name "$WEB_SUITE_NAME" \
-            --arg web_run_configuration_name "$WEB_RUN_CONFIGURATION_NAME" \
-            '{
-              repository: $repo,
-              branch: $branch,
-              commit_ids: ($commits[0] | tostring),
-              changes: $changes,
-              github_token: $gh_token,
-              qyrus_api_token: $qyrus_api_token,
-              api_enterprise_team_name: $api_enterprise_team_name,
-              api_enterprise_project_name: $api_enterprise_project_name,
-              api_enterprise_suite_name: $api_enterprise_suite_name,
-              api_enterprise_environment_name: $api_enterprise_environment_name,
-              web_team_name: $web_team_name,
-              web_project_name: $web_project_name,
-              web_suite_name: $web_suite_name,
-              web_run_configuration_name: $web_run_configuration_name
-            }' > payload.json
-
-          HTTP_CODE=$(curl -sS \
-            --connect-timeout 20 \
-            --max-time 300 \
-            --retry 2 \
-            --retry-delay 5 \
-            -o response.json \
-            -w "%{http_code}" \
-            -X POST "$ANALYZE_URL" \
-            -H "Content-Type: application/json" \
-            -H "github-token: ${GH_TOKEN}" \
-            -H "ngrok-skip-browser-warning: true" \
-            --data-binary @payload.json)
-
-          echo "Response Code: $HTTP_CODE"
-
-          if [[ "$HTTP_CODE" -lt 200 || "$HTTP_CODE" -ge 300 ]]; then
-            cat response.json || true
-            exit 1
-          fi
-
-          cat response.json || true
-
-          ANALYSIS_JOB_ID=$(jq -r '.impact_analysis_id // .job_id // empty' response.json)
-
-          if [[ -z "$ANALYSIS_JOB_ID" ]]; then
-            echo "Analyze API response did not include impact_analysis_id/job_id"
-            exit 1
-          fi
-
-          echo "ANALYSIS_JOB_ID=$ANALYSIS_JOB_ID" >> "$GITHUB_ENV"
-          echo "Analysis job id: $ANALYSIS_JOB_ID"
-
-      - name: Wait for analysis status
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          STATUS_URL="https://stg-gateway.qyrus.com:8243/seer-common-produce-noauth/v1/analysis-status/${ANALYSIS_JOB_ID}"
-          DEADLINE=$((SECONDS + 45 * 60))
-          INTERVAL_SECONDS=30
-
-          echo "Polling analysis status: $STATUS_URL"
-
-          while (( SECONDS < DEADLINE )); do
-            HTTP_CODE=$(curl -sS \
-              --connect-timeout 20 \
-              --max-time 60 \
-              -o status.json \
-              -w "%{http_code}" \
-              -H "github-token: ${GH_TOKEN}" \
-              -H "ngrok-skip-browser-warning: true" \
-              "$STATUS_URL" || true)
-
-            echo "Status HTTP Code: $HTTP_CODE"
-
-            if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
-              STATUS=$(jq -r '.status // "unknown"' status.json)
-              PHASE=$(jq -r '.phase_name // empty' status.json)
-              TITLE=$(jq -r '.status_title // empty' status.json)
-
-              echo "Analysis status: $STATUS $PHASE $TITLE"
-              cat status.json || true
-
-              case "$STATUS" in
-                completed|complete|success|succeeded)
-                  echo "Analysis completed"
-                  exit 0
-                  ;;
-                failed|error|cancelled|canceled)
-                  echo "Analysis failed"
-                  exit 1
-                  ;;
-              esac
-            else
-              cat status.json || true
-            fi
-
-            sleep "$INTERVAL_SECONDS"
-          done
-
-          echo "Timed out waiting for analysis after 45 minutes."
-          echo "The background job may still continue and generate the report."
-          exit 124
+#           echo "Timed out waiting for analysis after 45 minutes."
+#           echo "The background job may still continue and generate the report."
+#           exit 124
