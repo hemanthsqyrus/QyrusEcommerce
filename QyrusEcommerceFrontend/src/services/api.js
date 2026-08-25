@@ -90,6 +90,20 @@ export const authAPI = {
     });
   },
 
+  updateCartItemQuantity: (email, cartItemId, quantity) => {
+    return api.put('/update-cart-item-quantity/', {
+      email,
+      cart_item_id: cartItemId,
+      quantity,
+    });
+  },
+
+  clearCart: (email) => {
+    return api.delete('/clear-cart/', {
+      data: { email },
+    });
+  },
+
   addFavorite: (email, productId) => {
     return api.post('/add-favorite/', {
       email,
