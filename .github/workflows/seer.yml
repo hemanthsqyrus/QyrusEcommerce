@@ -1,11 +1,7 @@
-name: Send Web and API Enterprise Code Changes on Push
+name: Send Web and API Enterprise Code Changes After Merge
 
 on:
   push:
-    branches:
-      - seer_common_stg
-
-  pull_request:
     branches:
       - seer_common_stg
 
@@ -25,14 +21,6 @@ jobs:
         shell: bash
         env:
           GH_EVENT_TYPE: ${{ github.event_name }}
-          GH_PR_ID: ${{ github.event.pull_request.number }}
-          GH_PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_PR_SOURCE_BRANCH: ${{ github.event.pull_request.head.ref }}
-          GH_PR_TARGET_BRANCH: ${{ github.event.pull_request.base.ref }}
-          GH_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          GH_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          GH_PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
-          GH_PR_TIMESTAMP: ${{ github.event.pull_request.updated_at }}
           GH_PUSH_BRANCH: ${{ github.ref_name }}
           GH_PUSH_BEFORE_SHA: ${{ github.event.before }}
           GH_PUSH_HEAD_SHA: ${{ github.sha }}
@@ -40,29 +28,16 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ "$GH_EVENT_TYPE" == "pull_request" ]]; then
-            FROM_SHA="$GH_PR_BASE_SHA"
-            TO_SHA="$GH_PR_HEAD_SHA"
-            PULL_REQUEST_ID="$GH_PR_ID"
-            PULL_REQUEST_URL="$GH_PR_URL"
-            SOURCE_BRANCH="$GH_PR_SOURCE_BRANCH"
-            TARGET_BRANCH="$GH_PR_TARGET_BRANCH"
-            BASE_COMMIT_ID="$GH_PR_BASE_SHA"
-            HEAD_COMMIT_ID="$GH_PR_HEAD_SHA"
-            MERGE_COMMIT_ID="$GH_PR_MERGE_SHA"
-            EVENT_TIMESTAMP="$GH_PR_TIMESTAMP"
-          else
-            FROM_SHA="$GH_PUSH_BEFORE_SHA"
-            TO_SHA="$GH_PUSH_HEAD_SHA"
-            PULL_REQUEST_ID=""
-            PULL_REQUEST_URL=""
-            SOURCE_BRANCH="$GH_PUSH_BRANCH"
-            TARGET_BRANCH="$GH_PUSH_BRANCH"
-            BASE_COMMIT_ID="$GH_PUSH_BEFORE_SHA"
-            HEAD_COMMIT_ID="$GH_PUSH_HEAD_SHA"
-            MERGE_COMMIT_ID="$GH_PUSH_HEAD_SHA"
-            EVENT_TIMESTAMP="$GH_PUSH_TIMESTAMP"
-          fi
+          FROM_SHA="$GH_PUSH_BEFORE_SHA"
+          TO_SHA="$GH_PUSH_HEAD_SHA"
+          PULL_REQUEST_ID=""
+          PULL_REQUEST_URL=""
+          SOURCE_BRANCH="$GH_PUSH_BRANCH"
+          TARGET_BRANCH="$GH_PUSH_BRANCH"
+          BASE_COMMIT_ID="$GH_PUSH_BEFORE_SHA"
+          HEAD_COMMIT_ID="$GH_PUSH_HEAD_SHA"
+          MERGE_COMMIT_ID="$GH_PUSH_HEAD_SHA"
+          EVENT_TIMESTAMP="$GH_PUSH_TIMESTAMP"
 
           if [[ -z "$EVENT_TIMESTAMP" ]]; then
             EVENT_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
@@ -100,7 +75,7 @@ jobs:
         env:
           REPO_NAME: ${{ github.repository }}
           BRANCH_NAME: seer_common_stg
-          SEER_ENVIRONMENT_NAME: "pc"
+          SEER_ENVIRONMENT_NAME: "staging"
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GATEWAY_URL: https://gateway.qyrus.com
 
