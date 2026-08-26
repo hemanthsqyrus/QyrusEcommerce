@@ -77,7 +77,7 @@ jobs:
           BRANCH_NAME: seer_common_stg
           SEER_ENVIRONMENT_NAME: "staging"
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          GATEWAY_URL: https://gateway.qyrus.com
+          GATEWAY_URL: https://stg-gateway.qyrus.com
 
           QYRUS_API_TOKEN: ${{ secrets.QYRUS_API_TOKEN }}
 
@@ -178,5 +178,75 @@ jobs:
             exit 1
           fi
 
+          ANALYSIS_JOB_ID=$(jq -r '.impact_analysis_id // .job_id // empty' response.json)
+          if [[ -z "$ANALYSIS_JOB_ID" ]]; then
+            echo "❌ Analyze API response did not include an analysis job ID"
+            cat response.json || true
+            exit 1
+          fi
+          echo "ANALYSIS_JOB_ID=$ANALYSIS_JOB_ID" >> "$GITHUB_ENV"
+
           echo "✅ Successfully sent Web and API Enterprise changes"
           cat response.json || true
+
+      - name: Wait for analysis status
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GATEWAY_URL: https://stg-gateway.qyrus.com
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${ANALYSIS_JOB_ID:-}" ]]; then
+            echo "Analysis job ID is unavailable; the Analyze API step did not export it."
+            exit 1
+          fi
+
+          BASE="${GATEWAY_URL%/}"
+          STATUS_URL="${BASE}/seer-common-produce-noauth/v1/analysis-status/${ANALYSIS_JOB_ID}"
+          DEADLINE=$((SECONDS + 45 * 60))
+          INTERVAL_SECONDS=30
+
+          echo "Polling analysis status: $STATUS_URL"
+
+          while (( SECONDS < DEADLINE )); do
+            : > status.json
+            HTTP_CODE=$(curl -sS \
+              --connect-timeout 20 \
+              --max-time 60 \
+              -o status.json \
+              -w "%{http_code}" \
+              -H "github-token: ${GH_TOKEN}" \
+              -H "ngrok-skip-browser-warning: true" \
+              "$STATUS_URL" || true)
+
+            echo "Status HTTP Code: $HTTP_CODE"
+
+            if [[ "$HTTP_CODE" =~ ^[0-9]{3}$ ]]               && (( 10#$HTTP_CODE >= 200 && 10#$HTTP_CODE < 300 )); then
+              STATUS=$(jq -r '.status // "unknown" | ascii_downcase' status.json)
+              PHASE=$(jq -r '.phase_name // empty' status.json)
+              TITLE=$(jq -r '.status_title // empty' status.json)
+
+              echo "Analysis status: $STATUS $PHASE $TITLE"
+              cat status.json || true
+
+              case "$STATUS" in
+                completed|complete|success|succeeded)
+                  echo "Analysis completed"
+                  exit 0
+                  ;;
+                failed|error|cancelled|canceled)
+                  echo "Analysis failed"
+                  exit 1
+                  ;;
+              esac
+            else
+              cat status.json || true
+            fi
+
+            sleep "$INTERVAL_SECONDS"
+          done
+
+          echo "Timed out waiting for analysis after 45 minutes."
+          echo "The background job may still continue and generate the report."
+          exit 124
