@@ -5,6 +5,11 @@ on:
     branches:
       - seer_common_stg
 
+
+  pull_request:
+    branches:
+      - seer_common_stg
+
 jobs:
   send_web_api_enterprise_code_changes:
     runs-on: ubuntu-latest
