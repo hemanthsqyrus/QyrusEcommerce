@@ -1,0 +1,182 @@
+name: Send Web and API Enterprise Code Changes After Merge
+
+on:
+  push:
+    branches:
+      - seer_common_stg
+
+jobs:
+  send_web_api_enterprise_code_changes:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Compute commit range & list
+        id: range
+        shell: bash
+        env:
+          GH_EVENT_TYPE: ${{ github.event_name }}
+          GH_PUSH_BRANCH: ${{ github.ref_name }}
+          GH_PUSH_BEFORE_SHA: ${{ github.event.before }}
+          GH_PUSH_HEAD_SHA: ${{ github.sha }}
+          GH_PUSH_TIMESTAMP: ${{ github.event.head_commit.timestamp }}
+        run: |
+          set -euo pipefail
+
+          FROM_SHA="$GH_PUSH_BEFORE_SHA"
+          TO_SHA="$GH_PUSH_HEAD_SHA"
+          PULL_REQUEST_ID=""
+          PULL_REQUEST_URL=""
+          SOURCE_BRANCH="$GH_PUSH_BRANCH"
+          TARGET_BRANCH="$GH_PUSH_BRANCH"
+          BASE_COMMIT_ID="$GH_PUSH_BEFORE_SHA"
+          HEAD_COMMIT_ID="$GH_PUSH_HEAD_SHA"
+          MERGE_COMMIT_ID="$GH_PUSH_HEAD_SHA"
+          EVENT_TIMESTAMP="$GH_PUSH_TIMESTAMP"
+
+          if [[ -z "$EVENT_TIMESTAMP" ]]; then
+            EVENT_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          fi
+
+          echo "FROM_SHA=$FROM_SHA" >> $GITHUB_ENV
+          echo "TO_SHA=$TO_SHA" >> $GITHUB_ENV
+          echo "EVENT_TYPE=$GH_EVENT_TYPE" >> $GITHUB_ENV
+          echo "PULL_REQUEST_ID=$PULL_REQUEST_ID" >> $GITHUB_ENV
+          echo "PULL_REQUEST_URL=$PULL_REQUEST_URL" >> $GITHUB_ENV
+          echo "SOURCE_BRANCH=$SOURCE_BRANCH" >> $GITHUB_ENV
+          echo "TARGET_BRANCH=$TARGET_BRANCH" >> $GITHUB_ENV
+          echo "BASE_COMMIT_ID=$BASE_COMMIT_ID" >> $GITHUB_ENV
+          echo "HEAD_COMMIT_ID=$HEAD_COMMIT_ID" >> $GITHUB_ENV
+          echo "MERGE_COMMIT_ID=$MERGE_COMMIT_ID" >> $GITHUB_ENV
+          echo "EVENT_TIMESTAMP=$EVENT_TIMESTAMP" >> $GITHUB_ENV
+
+          git rev-list --reverse "${FROM_SHA}..${TO_SHA}" \
+            | jq -R -s -c 'split("\n")[:-1]' > commits.json
+
+          echo "Commits:"
+          cat commits.json
+
+      - name: Get code changes diff
+        id: diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff "${FROM_SHA}..${TO_SHA}" > changes.txt
+          echo "Diff size:"
+          wc -c changes.txt
+
+      - name: Send Web and API Enterprise changes to Analyze API
+        shell: bash
+        env:
+          REPO_NAME: ${{ github.repository }}
+          BRANCH_NAME: seer_common_stg
+          SEER_ENVIRONMENT_NAME: "staging"
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GATEWAY_URL: https://gateway.qyrus.com
+
+          QYRUS_API_TOKEN: ${{ secrets.QYRUS_API_TOKEN }}
+
+          API_ENTERPRISE_TEAM_NAME: ${{ secrets.API_ENTERPRISE_TEAM_NAME }}
+          API_ENTERPRISE_PROJECT_NAME: ${{ secrets.API_ENTERPRISE_PROJECT_NAME }}
+          API_ENTERPRISE_SUITE_NAME: ${{ secrets.API_ENTERPRISE_SUITE_NAME }}
+          API_ENTERPRISE_ENVIRONMENT_NAME: ${{ secrets.API_ENTERPRISE_ENVIRONMENT_NAME }}
+
+          WEB_TEAM_NAME: ${{ secrets.WEB_TEAM_NAME }}
+          WEB_PROJECT_NAME: ${{ secrets.WEB_PROJECT_NAME }}
+          WEB_SUITE_NAME: ${{ secrets.WEB_SUITE_NAME }}
+          WEB_RUN_CONFIGURATION_NAME: ${{ secrets.WEB_RUN_CONFIGURATION_NAME }}
+        run: |
+          set -euo pipefail
+
+          BASE="${GATEWAY_URL%/}"
+          ANALYZE_URL="${BASE}/seer-common-produce-noauth/v1/analyze-impact"
+
+          jq -n \
+            --arg repo "$REPO_NAME" \
+            --arg branch "$BRANCH_NAME" \
+            --arg environment_name "$SEER_ENVIRONMENT_NAME" \
+            --arg event_type "$EVENT_TYPE" \
+            --arg pull_request_id "$PULL_REQUEST_ID" \
+            --arg pull_request_url "$PULL_REQUEST_URL" \
+            --arg source_branch "$SOURCE_BRANCH" \
+            --arg target_branch "$TARGET_BRANCH" \
+            --arg base_commit_id "$BASE_COMMIT_ID" \
+            --arg head_commit_id "$HEAD_COMMIT_ID" \
+            --arg merge_commit_id "$MERGE_COMMIT_ID" \
+            --arg event_timestamp "$EVENT_TIMESTAMP" \
+            --slurpfile commits commits.json \
+            --rawfile changes changes.txt \
+            --arg gh_token "$GH_TOKEN" \
+            --arg api_enterprise_team_name "$API_ENTERPRISE_TEAM_NAME" \
+            --arg api_enterprise_project_name "$API_ENTERPRISE_PROJECT_NAME" \
+            --arg api_enterprise_suite_name "$API_ENTERPRISE_SUITE_NAME" \
+            --arg api_enterprise_environment_name "$API_ENTERPRISE_ENVIRONMENT_NAME" \
+            --arg qyrus_api_token "$QYRUS_API_TOKEN" \
+            --arg web_team_name "$WEB_TEAM_NAME" \
+            --arg web_project_name "$WEB_PROJECT_NAME" \
+            --arg web_suite_name "$WEB_SUITE_NAME" \
+            --arg web_run_configuration_name "$WEB_RUN_CONFIGURATION_NAME" \
+            '{
+              repository: $repo,
+              branch: $branch,
+              environment_name: $environment_name,
+              event_type: $event_type,
+              pull_request_id: $pull_request_id,
+              pull_request_url: $pull_request_url,
+              source_branch: $source_branch,
+              target_branch: $target_branch,
+              base_commit_id: $base_commit_id,
+              head_commit_id: $head_commit_id,
+              merge_commit_id: $merge_commit_id,
+              event_timestamp: $event_timestamp,
+              commit_ids: ($commits[0] | tostring),
+              changes: $changes,
+              github_token: $gh_token,
+
+              qyrus_api_token: $qyrus_api_token,
+
+              api_enterprise_team_name: $api_enterprise_team_name,
+              api_enterprise_project_name: $api_enterprise_project_name,
+              api_enterprise_suite_name: $api_enterprise_suite_name,
+              api_enterprise_environment_name: $api_enterprise_environment_name,
+
+              web_team_name: $web_team_name,
+              web_project_name: $web_project_name,
+              web_suite_name: $web_suite_name,
+              web_run_configuration_name: $web_run_configuration_name
+            }' > payload.json
+
+          echo "Branch sent to Analyze API: $BRANCH_NAME"
+          echo "Posting to $ANALYZE_URL"
+          echo "Payload size:"
+          wc -c payload.json
+
+          HTTP_CODE=$(curl -sS \
+            --connect-timeout 20 \
+            --max-time 300 \
+            --retry 2 \
+            --retry-delay 5 \
+            -o response.json \
+            -w "%{http_code}" \
+            -X POST "$ANALYZE_URL" \
+            -H "Content-Type: application/json" \
+            -H "github-token: ${GH_TOKEN}" \
+            -H "request-source: seer" \
+            -H "ngrok-skip-browser-warning: true" \
+            --data-binary @payload.json)
+
+          echo "Response Code: $HTTP_CODE"
+
+          if [[ "$HTTP_CODE" -lt 200 || "$HTTP_CODE" -ge 300 ]]; then
+            echo "❌ Error Response:"
+            cat response.json || true
+            exit 1
+          fi
+
+          echo "✅ Successfully sent Web and API Enterprise changes"
+          cat response.json || true
