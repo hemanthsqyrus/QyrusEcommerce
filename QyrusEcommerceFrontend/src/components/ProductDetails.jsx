@@ -45,8 +45,8 @@ const ProductDetails = () => {
       }
   
       try {
-        await authAPI.addToCart(email, productId, selectedColor, selectedProvider, selectedSize, quantity);
-        toast.success('Added to cart successfully!');
+        const { data } = await authAPI.addToCart(email, productId, selectedColor, selectedProvider, selectedSize, quantity);
+        toast.success(data?.message || 'Added to cart successfully!');
       } catch (err) {
         console.error('Failed to add to cart:', err);
         toast.error('Failed to add to cart. Please try again.');
