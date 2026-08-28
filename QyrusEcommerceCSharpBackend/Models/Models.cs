@@ -34,16 +34,6 @@ public class RemoveFromCartRequest {
     [JsonPropertyName("cart_item_id")] public string CartItemId { get; set; } = "";
 }
 
-public class UpdateCartItemQuantityRequest {
-    [EmailAddress] public string Email { get; set; } = "";
-    [JsonPropertyName("cart_item_id")] public string CartItemId { get; set; } = "";
-    public int Quantity { get; set; }
-}
-
-public class ClearCartRequest {
-    [EmailAddress] public string Email { get; set; } = "";
-}
-
 public class CreateAddressRequest {
     [EmailAddress] public string Email { get; set; } = "";
     public string Address { get; set; } = "";
