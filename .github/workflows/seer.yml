@@ -3,11 +3,11 @@ name: Send Web and API Enterprise Code Changes After Merge
 on:
   push:
     branches:
-      - seer_common_stg
+      - temp/scs1
 
   pull_request:
     branches:
-      - seer_common_stg
+      - temp/scs1
 
 jobs:
   send_web_api_enterprise_code_changes:
@@ -78,7 +78,7 @@ jobs:
         shell: bash
         env:
           REPO_NAME: ${{ github.repository }}
-          BRANCH_NAME: seer_common_stg
+          BRANCH_NAME: temp/scs1
           SEER_ENVIRONMENT_NAME: "staging"
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GATEWAY_URL: https://gateway.qyrus.com
