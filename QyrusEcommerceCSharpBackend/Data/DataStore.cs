@@ -15,6 +15,8 @@ public static class DataStore {
         { "admin@qyrus.com", new AccountDetails { Name = "Admin User", Age = 30, Country = "India", Phone = "1234567890" } }
     };
     public static Dictionary<string, List<UserAddress>> AddressesDb = new(StringComparer.OrdinalIgnoreCase);
+    public static readonly object CartLock = new();
+    public static Dictionary<string, List<CartItem>> SavedCartDb = new(StringComparer.OrdinalIgnoreCase);
     public static Dictionary<string, List<CartItem>> CartDb = new(StringComparer.OrdinalIgnoreCase);
     public static Dictionary<string, HashSet<int>> FavoritesDb = new(StringComparer.OrdinalIgnoreCase);
     public static Dictionary<string, List<Order>> OrdersDb = new(StringComparer.OrdinalIgnoreCase);
