@@ -29,6 +29,11 @@ public class AddToCartRequest {
     public int Quantity { get; set; }
 }
 
+public class SavedCartItemRequest {
+    public string Email { get; set; } = "";
+    [JsonPropertyName("cart_item_id")] public string CartItemId { get; set; } = "";
+}
+
 public class RemoveFromCartRequest {
     public string Email { get; set; } = "";
     [JsonPropertyName("cart_item_id")] public string CartItemId { get; set; } = "";
