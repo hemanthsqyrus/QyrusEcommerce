@@ -8,7 +8,7 @@ on:
 
 jobs:
   send_web_api_enterprise_code_changes:
-    runs-on: runner-for-qyrus-public
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
@@ -83,7 +83,7 @@ jobs:
           BRANCH_NAME: "seer_common_stg"
           SEER_ENVIRONMENT_NAME: "staging"
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          GATEWAY_URL: https://stg-gateway.qyrus.com
+          GATEWAY_URL: https://gateway.qyrus.com
 
           QYRUS_API_TOKEN: ${{ secrets.QYRUS_API_TOKEN }}
 
@@ -183,6 +183,49 @@ jobs:
             cat response.json || true
             exit 1
           fi
+
+          JOB_ID="$(jq -r '.impact_analysis_id // empty' response.json)"
+          if [[ -z "$JOB_ID" ]]; then
+            echo "❌ Analyze API accepted the request but did not return impact_analysis_id:"
+            cat response.json || true
+            exit 1
+          fi
+
+          STATUS_URL="${BASE}/seer-common-produce-noauth/v1/analysis-status/${JOB_ID}"
+          echo "Waiting for analysis job ${JOB_ID}"
+          # 120 polls × 15 seconds = 30 minutes. The analysis itself continues
+          # independently; timing out only fails this GitHub Actions run.
+          for attempt in $(seq 1 120); do
+            STATUS_HTTP_CODE=$(curl -sS               --connect-timeout 20               --max-time 60               -o status.json               -w "%{http_code}"               "$STATUS_URL")
+
+            if [[ "$STATUS_HTTP_CODE" -lt 200 || "$STATUS_HTTP_CODE" -ge 300 ]]; then
+              echo "❌ Could not read status for analysis job ${JOB_ID} (HTTP ${STATUS_HTTP_CODE}):"
+              cat status.json || true
+              exit 1
+            fi
+
+            JOB_STATUS="$(jq -r '.status // "unknown"' status.json)"
+            JOB_TITLE="$(jq -r '.status_title // empty' status.json)"
+            echo "Analysis job ${JOB_ID}: ${JOB_STATUS}${JOB_TITLE:+ — ${JOB_TITLE}}"
+
+            case "$JOB_STATUS" in
+              completed)
+                echo "✅ Analysis job ${JOB_ID} completed"
+                break
+                ;;
+              failed)
+                echo "❌ Analysis job ${JOB_ID} failed:"
+                cat status.json || true
+                exit 1
+                ;;
+            esac
+
+            if [[ "$attempt" -eq 120 ]]; then
+              echo "❌ Timed out waiting for analysis job ${JOB_ID} after 30 minutes"
+              exit 1
+            fi
+            sleep 15
+          done
 
           echo "✅ Successfully sent Web and API Enterprise changes"
           cat response.json || true
