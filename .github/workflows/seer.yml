@@ -8,7 +8,7 @@ on:
 
 jobs:
   send_web_api_enterprise_code_changes:
-    runs-on: runner-for-qyrus
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
@@ -83,7 +83,7 @@ jobs:
           BRANCH_NAME: "seer_common_stg"
           SEER_ENVIRONMENT_NAME: "staging"
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          GATEWAY_URL: https://stg-gateway.qyrus.com
+          GATEWAY_URL: https://gateway.qyrus.com
 
           QYRUS_API_TOKEN: ${{ secrets.QYRUS_API_TOKEN }}
 
@@ -96,7 +96,6 @@ jobs:
           WEB_PROJECT_NAME: ${{ secrets.WEB_PROJECT_NAME }}
           WEB_SUITE_NAME: ${{ secrets.WEB_SUITE_NAME }}
           WEB_RUN_CONFIGURATION_NAME: ${{ secrets.WEB_RUN_CONFIGURATION_NAME }}
-          APP_URL: ${{ secrets.APP_URL }}
         run: |
           set -euo pipefail
 
@@ -128,7 +127,6 @@ jobs:
             --arg web_project_name "$WEB_PROJECT_NAME" \
             --arg web_suite_name "$WEB_SUITE_NAME" \
             --arg web_run_configuration_name "$WEB_RUN_CONFIGURATION_NAME" \
-            --arg app_url "$APP_URL" \
             '{
               repository: $repo,
               branch: $branch,
@@ -156,8 +154,7 @@ jobs:
               web_team_name: $web_team_name,
               web_project_name: $web_project_name,
               web_suite_name: $web_suite_name,
-              web_run_configuration_name: $web_run_configuration_name,
-              app_url: $app_url
+              web_run_configuration_name: $web_run_configuration_name
             }' > payload.json
 
           echo "Branch sent to Analyze API: $BRANCH_NAME"
