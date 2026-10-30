@@ -8,14 +8,18 @@ on:
 
 jobs:
   send_web_api_enterprise_code_changes:
-    runs-on: ubuntu-latest
+    runs-on: runner-for-qyrus
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GH_TOKEN }}
+          token: ${{ github.token }}
 
       - name: Compute commit range & list
         id: range
@@ -82,8 +86,8 @@ jobs:
           REPO_NAME: ${{ github.repository }}
           BRANCH_NAME: "seer_common_stg"
           SEER_ENVIRONMENT_NAME: "staging"
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          GATEWAY_URL: https://gateway.qyrus.com
+          GH_TOKEN: ${{ github.token }}
+          GATEWAY_URL: https://stg-gateway.qyrus.com
 
           QYRUS_API_TOKEN: ${{ secrets.QYRUS_API_TOKEN }}
 
@@ -96,6 +100,7 @@ jobs:
           WEB_PROJECT_NAME: ${{ secrets.WEB_PROJECT_NAME }}
           WEB_SUITE_NAME: ${{ secrets.WEB_SUITE_NAME }}
           WEB_RUN_CONFIGURATION_NAME: ${{ secrets.WEB_RUN_CONFIGURATION_NAME }}
+          APP_URL: ${{ secrets.APP_URL }}
         run: |
           set -euo pipefail
 
@@ -127,6 +132,7 @@ jobs:
             --arg web_project_name "$WEB_PROJECT_NAME" \
             --arg web_suite_name "$WEB_SUITE_NAME" \
             --arg web_run_configuration_name "$WEB_RUN_CONFIGURATION_NAME" \
+            --arg app_url "$APP_URL" \
             '{
               repository: $repo,
               branch: $branch,
@@ -154,7 +160,8 @@ jobs:
               web_team_name: $web_team_name,
               web_project_name: $web_project_name,
               web_suite_name: $web_suite_name,
-              web_run_configuration_name: $web_run_configuration_name
+              web_run_configuration_name: $web_run_configuration_name,
+              app_url: $app_url
             }' > payload.json
 
           echo "Branch sent to Analyze API: $BRANCH_NAME"
@@ -193,9 +200,10 @@ jobs:
 
           STATUS_URL="${BASE}/seer-common-produce-noauth/v1/analysis-status/${JOB_ID}"
           echo "Waiting for analysis job ${JOB_ID}"
-          # 120 polls × 15 seconds = 30 minutes. The analysis itself continues
-          # independently; timing out only fails this GitHub Actions run.
-          for attempt in $(seq 1 120); do
+          # Nominal wait: 220 polls × 15 seconds = 55 minutes, plus HTTP time.
+          # The job token expires when this job ends, fails, or is cancelled.
+          # The whole job has a 60-minute timeout.
+          for attempt in $(seq 1 220); do
             STATUS_HTTP_CODE=$(curl -sS               --connect-timeout 20               --max-time 60               -o status.json               -w "%{http_code}"               "$STATUS_URL")
 
             if [[ "$STATUS_HTTP_CODE" -lt 200 || "$STATUS_HTTP_CODE" -ge 300 ]]; then
@@ -220,8 +228,8 @@ jobs:
                 ;;
             esac
 
-            if [[ "$attempt" -eq 120 ]]; then
-              echo "❌ Timed out waiting for analysis job ${JOB_ID} after 30 minutes"
+            if [[ "$attempt" -eq 220 ]]; then
+              echo "❌ Timed out waiting for analysis job ${JOB_ID}; the job token expires when this job ends"
               exit 1
             fi
             sleep 15
