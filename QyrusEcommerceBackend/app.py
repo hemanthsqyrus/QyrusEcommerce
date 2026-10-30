@@ -9,6 +9,7 @@ from typing import Optional
 import uuid
 import uvicorn
 import traceback
+from threading import RLock
 from product_db import products_db, product_categories
 from collections import defaultdict
 app = FastAPI()
@@ -31,6 +32,8 @@ password_reset_tokens = {}
 account_details_db = {}
 addresses_db = {}
 cart_db = {}
+saved_cart_db = {}
+cart_lock = RLock()
 favorites_db = {}
 orders_db = {}
 account_details_db["admin@qyrus.com"] = {
@@ -61,6 +64,10 @@ class AddToCartRequest(BaseModel):
     provider: str
     size: str
     quantity: int
+
+class SavedCartItemRequest(BaseModel):
+    email: EmailStr
+    cart_item_id: str
 
 class CreateAddressRequest(BaseModel):
     email: EmailStr
@@ -252,34 +259,29 @@ def update_account_details(request: UpdateAccountDetailsRequest):
 
 @app.post("/add-to-cart/")
 def add_to_cart(request: AddToCartRequest):
-    # Check if the user exists
-    if request.email not in users_db:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Check if product exists
-    product = next((p for p in products_db if p["id"] == request.product_id), None)
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    
-    # Initialize user's cart if not already present
-    if request.email not in cart_db:
-        cart_db[request.email] = []
-    
-    # Add item to the user's cart
-    cart_item = {
-        "cart_item_id": str(uuid.uuid4()),
-        "product_id": request.product_id,
-        "color": request.color,
-        "provider": request.provider,
-        "size": request.size,
-        "quantity": request.quantity
-    }
-    cart_db[request.email].append(cart_item)
-    
-    return {
-        "message": "Item added to cart successfully",
-        "cart": cart_db[request.email]
-    }
+    with cart_lock:
+        _require_user(request.email)
+        if request.quantity < 1:
+            raise HTTPException(status_code=400, detail="Quantity must be at least 1")
+        _require_product(request.product_id)
+        user_cart = cart_db.setdefault(request.email, [])
+        existing_item = next((item for item in user_cart
+            if item["product_id"] == request.product_id
+            and _same_variant(item, request.color, request.provider, request.size)), None)
+        if existing_item:
+            existing_item["quantity"] = _add_quantity(existing_item["quantity"], request.quantity)
+            message = "Item quantity updated successfully"
+        else:
+            user_cart.append({
+                "cart_item_id": str(uuid.uuid4()),
+                "product_id": request.product_id,
+                "color": request.color,
+                "provider": request.provider,
+                "size": request.size,
+                "quantity": request.quantity
+            })
+            message = "Item added to cart successfully"
+        return {"message": message, "cart": _cart_snapshot(user_cart)}
 
 @app.post("/record-contact/")
 def record_contact(request: RecordContactRequest):
@@ -295,34 +297,9 @@ def record_contact(request: RecordContactRequest):
 
 @app.get("/get-cart/")
 def get_cart(email: EmailStr):
-    # Check if the user exists
-    if email not in users_db:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Get the user's cart
-    user_cart = cart_db.get(email, [])
-    
-    # Fetch detailed product info for each cart item
-    detailed_cart = []
-    for item in user_cart:
-        product = next((p for p in products_db if p["id"] == item["product_id"]), None)
-        if product:
-            detailed_cart.append({
-                "cart_item_id": item["cart_item_id"],
-                "product_id": product["id"],
-                "name": product["name"],
-                "price": product["price"],
-                "image": product["image"],  # Include the image field
-                "color": item["color"],
-                "provider": item["provider"],
-                "size": item["size"],
-                "quantity": item["quantity"]
-            })
-    
-    return {
-        "email": email,
-        "cart": detailed_cart
-    }
+    with cart_lock:
+        _require_user(email)
+        return {"email": email, "cart": _cart_snapshot(cart_db.get(email, []))}
 
 
 @app.delete("/remove-from-cart/")
@@ -331,28 +308,115 @@ async def remove_from_cart(request: Request):
     email = body.get("email")
     cart_item_id = body.get("cart_item_id")
 
-    # Validate email
+    with cart_lock:
+        _require_user(email)
+        user_cart = cart_db.get(email, [])
+        if not user_cart:
+            raise HTTPException(status_code=404, detail="Cart is empty")
+        updated_cart = [item for item in user_cart if item["cart_item_id"] != cart_item_id]
+        if len(updated_cart) == len(user_cart):
+            raise HTTPException(status_code=404, detail="Cart item not found")
+        cart_db[email] = updated_cart
+        return {"message": "Item removed from cart successfully", "cart": _cart_snapshot(updated_cart)}
+
+@app.get("/get-saved-cart/")
+def get_saved_cart(email: EmailStr):
+    with cart_lock:
+        _require_user(email)
+        return {"email": email, "saved_cart": _cart_snapshot(saved_cart_db.get(email, []))}
+
+@app.post("/save-cart-item/")
+def save_cart_item(request: SavedCartItemRequest):
+    with cart_lock:
+        _require_user(request.email)
+        item = _remove_item(cart_db.get(request.email, []), request.cart_item_id, "Cart item not found")
+        saved_cart_db.setdefault(request.email, []).append(item)
+        return _cart_state(request.email)
+
+@app.post("/restore-cart-item/")
+def restore_cart_item(request: SavedCartItemRequest):
+    with cart_lock:
+        _require_user(request.email)
+        saved_items = saved_cart_db.get(request.email, [])
+        saved_item = _find_item(saved_items, request.cart_item_id, "Saved cart item not found")
+        _require_product(saved_item["product_id"])
+        user_cart = cart_db.setdefault(request.email, [])
+        matching_item = next((item for item in user_cart
+            if item["product_id"] == saved_item["product_id"]
+            and _same_variant(item, saved_item["color"], saved_item["provider"], saved_item["size"])), None)
+        if matching_item:
+            merged_quantity = _add_quantity(matching_item["quantity"], saved_item["quantity"])
+            _remove_item(saved_items, request.cart_item_id, "Saved cart item not found")
+            matching_item["quantity"] = merged_quantity
+        else:
+            user_cart.append(_remove_item(saved_items, request.cart_item_id, "Saved cart item not found"))
+        return _cart_state(request.email)
+
+@app.delete("/remove-saved-cart-item/")
+async def remove_saved_cart_item(request: Request):
+    body = await request.json()
+    try:
+        saved_request = SavedCartItemRequest(**body)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Email and cart_item_id are required")
+    with cart_lock:
+        _require_user(saved_request.email)
+        _remove_item(saved_cart_db.get(saved_request.email, []), saved_request.cart_item_id, "Saved cart item not found")
+        return _cart_state(saved_request.email)
+
+def _require_user(email):
     if email not in users_db:
         raise HTTPException(status_code=404, detail="User not found")
-    
-    # Validate cart exists
-    user_cart = cart_db.get(email, [])
-    if not user_cart:
-        raise HTTPException(status_code=404, detail="Cart is empty")
 
-    # Remove the item with the given cart_item_id
-    updated_cart = [item for item in user_cart if item["cart_item_id"] != cart_item_id]
+def _require_product(product_id):
+    product = next((product for product in products_db if product["id"] == product_id), None)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return product
 
-    # Check if an item was removed
-    if len(updated_cart) == len(user_cart):
-        raise HTTPException(status_code=404, detail="Cart item not found")
+def _same_variant(item, color, provider, size):
+    return all((item.get(field) or "").casefold() == (value or "").casefold()
+               for field, value in (("color", color), ("provider", provider), ("size", size)))
 
-    # Update the cart
-    cart_db[email] = updated_cart
+def _add_quantity(current, additional):
+    quantity = current + additional
+    if quantity > 2_147_483_647:
+        raise HTTPException(status_code=400, detail="Quantity is too large")
+    return quantity
 
+def _remove_item(items, cart_item_id, message):
+    item = _find_item(items, cart_item_id, message)
+    items.remove(item)
+    return item
+
+def _find_item(items, cart_item_id, message):
+    item = next((item for item in items if item["cart_item_id"] == cart_item_id), None)
+    if item is None:
+        raise HTTPException(status_code=404, detail=message)
+    return item
+
+def _cart_snapshot(items):
+    detailed_cart = []
+    for item in items:
+        product = next((product for product in products_db if product["id"] == item["product_id"]), None)
+        if product:
+            detailed_cart.append({
+                "cart_item_id": item["cart_item_id"],
+                "product_id": product["id"],
+                "name": product["name"],
+                "price": product["price"],
+                "image": product["image"],
+                "color": item["color"],
+                "provider": item["provider"],
+                "size": item["size"],
+                "quantity": item["quantity"]
+            })
+    return detailed_cart
+
+def _cart_state(email):
     return {
-        "message": "Item removed from cart successfully",
-        "cart": cart_db[email]
+        "cart": _cart_snapshot(cart_db.get(email, [])),
+        "saved_cart": _cart_snapshot(saved_cart_db.get(email, []))
     }
 
 
@@ -576,4 +640,4 @@ def cancel_order(request: CancelOrderRequest):
 
 
 if __name__ == "__main__":
-    uvicorn.run('app:app', port=9892, reload=True)    
+    uvicorn.run('app:app', port=9892, reload=True)

@@ -3,7 +3,7 @@ import axios from 'axios';
 
 // Create axios instance with base configuration
 const api = axios.create({
-  baseURL: 'https://testui-qyrusbot.qyrus.com/qart-java', // Change this to your API base URL
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://testui-qyrusbot.qyrus.com/qart-java',
   headers: {
     'Content-Type': 'application/json'
   }
@@ -71,6 +71,22 @@ export const authAPI = {
       quantity,
     });
   },
+
+  getSavedCart: (email) => api.get('/get-saved-cart/', { params: { email } }),
+
+  saveCartItem: (email, cartItemId) => api.post('/save-cart-item/', {
+    email,
+    cart_item_id: cartItemId,
+  }),
+
+  restoreCartItem: (email, cartItemId) => api.post('/restore-cart-item/', {
+    email,
+    cart_item_id: cartItemId,
+  }),
+
+  removeSavedCartItem: (email, cartItemId) => api.delete('/remove-saved-cart-item/', {
+    data: { email, cart_item_id: cartItemId },
+  }),
 
   getCart: (email) => {
     return api.get('/get-cart/', { params: {email} });
